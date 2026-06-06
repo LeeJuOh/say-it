@@ -1,0 +1,37 @@
+Status: ready-for-agent
+Blocked by: 05-s2-role-swap
+
+# S3 통합 + S4 마무리 (takeaway + 라벨 저장)
+
+## What to build
+
+**S3 통합:** 유저가 본인 자리로 복귀, "그래서 내가 원했던 게 뭐냐" 정리. 반추(감정에 매달림)에서 문제해결(목표지향)로 전환 (RF-CBT).
+
+**S4 마무리 (4비트):**
+1. **통합 회수** — 봇이 takeaway 초안 제시 ("넌 사과가 아니라 인정을 원했어, 맞아?")
+2. **유저 확정** — 유저가 자기 말로 고쳐 소유 (그냥 "응" 아님, 본인이 articulate해야 박힘)
+3. **허구 재확인** — "이건 네 기억 속 그 사람, 진짜 아냐" (cognitive defusion, 봇 의존·가짜 친밀 차단)
+4. **라벨 확정 + takeaway 저장** — 모델이 기존 라벨 목록 보고 dedup (같은 이슈=기존 라벨 재사용, 다르면 신규 생성). 확정 라벨 + takeaway 원문을 takeaway_log에 저장. 라벨 매칭 = 정확 문자열 (스크립트/결정적).
+
+### takeaway_log 쓰기 메커니즘
+
+모델이 S4 bit 4에서 라벨·takeaway 확정 후, **`scripts/save_takeaway.sh`(또는 동등 스크립트)를 호출**해 takeaway_log.json에 append. hook은 takeaway_log를 **읽기만** 함(입구 매칭용). 쓰기는 모델→스크립트 경로.
+
+> 이 슬라이스의 라벨 저장이 완료되어야 이슈 03(S1 재방문 가드 입구)의 매칭이 실제로 작동함.
+
+세션은 takeaway 한 줄로 **강제 종료** — 끝없이 늘어져 세션 간 반추로 새지 않게.
+
+### SKILL.md 영향
+
+기존 `/say-it` SKILL.md에 추가 — S3 통합 + S4 4비트 마무리 프롬프트 모듈 + save_takeaway 스크립트 호출 지침.
+
+## Acceptance criteria
+
+- [ ] S3에서 "내가 원한 게 뭐냐" 전환 프롬프트
+- [ ] S4 bit 1: 봇이 takeaway 초안 제시
+- [ ] S4 bit 2: 유저가 자기 말로 고쳐 확정 (단순 수긍 아님)
+- [ ] S4 bit 3: 허구 면책 표시
+- [ ] S4 bit 4: 모델이 기존 라벨 보고 dedup → scripts/ 스크립트로 takeaway_log에 저장
+- [ ] 세션이 takeaway 후 강제 종료 (늘어짐 방지)
+- [ ] takeaway는 원문 보존 (요약/압축 없음)
+- [ ] save_takeaway 스크립트 유닛테스트 (append 정확성, JSON 무결성)
