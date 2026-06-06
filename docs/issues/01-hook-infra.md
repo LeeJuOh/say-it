@@ -10,8 +10,6 @@ Blocked by: None
 스킬 폴더 생성 시 `references/`에 빌드 참조 자료 번들:
 - PRD.md (기전 표, 아키텍처 결정)
 - ADR 0001~0004 (설계 근거)
-- brainstorm.md (사고 과정)
-- yourself-skill 5층 구조 + tools/ 패턴 스니펫 (차용 원본)
 
 ### Hook 인프라
 
@@ -30,7 +28,7 @@ Hook stdout → Claude Code가 `<system-reminder>`로 모델 컨텍스트에 주
 
 ### 상태 파일 3종
 
-- **persona** — 빌드 산출물 (이 슬라이스에선 스키마만, 실제 생성은 이슈 02)
+- **persona (`$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json`)** — 빌드 산출물 (이 슬라이스에선 스키마만, 실제 생성은 이슈 02). 5층 구조: L0 하드규칙 / L1 정체 / L2 말투 / L3 감정트리거 / L4 관계역학. `corrections` 배열로 교정 누적(이슈 08).
 - **session_state.json** — 세션 내: 현재 단계(S1-S4), 턴 수, 연장 여부
 - **takeaway_log.json** — 세션 간: append-only, 테마 라벨 + takeaway 원문. 읽기=hook(입구 매칭용), **쓰기=모델이 scripts/ 스크립트 호출** (S4 저장 시, 이슈 06 참조)
 
@@ -43,10 +41,12 @@ Hook stdout → Claude Code가 `<system-reminder>`로 모델 컨텍스트에 주
 ## Acceptance criteria
 
 - [ ] UserPromptSubmit hook이 매 유저 메시지마다 실행됨
-- [ ] session_state.json 생성/갱신: stage(S1-S4), turn count, extension flag
+- [ ] session_state.json 생성/갱신: stage(vent/role-swap/integration/closure), turn count, extension flag
 - [ ] takeaway_log.json: append-only, theme label + takeaway per session
 - [ ] 매 턴 틱이 turn count를 +1
 - [ ] Hook stdout → system-reminder로 모델 컨텍스트에 주입 확인
+- [ ] persona 파일 JSON 스키마 정의 (5층 + corrections 배열)
 - [ ] 상태 파일 읽기/쓰기/증분 유닛테스트
-- [ ] references/에 PRD, ADR 4개, brainstorm, yourself 패턴 스니펫 번들
+- [ ] 플러그인 폴더 scaffold 확정 + manifest.json 생성
+- [ ] references/에 PRD, ADR 4개 번들
 - [ ] settings.json에 hook 등록 + `/say-it` 스킬 활성 시에만 실행 조건

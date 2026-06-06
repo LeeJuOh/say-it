@@ -34,4 +34,6 @@ Layer 4가 yourself의 "인간관계"를 **관계 맥락**으로 교체한 say-i
 - [ ] 빈 칸은 LLM 추론으로 채움
 - [ ] "내 인식 속 그 사람, 진짜 아님" 안내 표시
 - [ ] 유저가 페르소나 요약 미리보기 후 확정 가능
-- [ ] 페르소나 파일이 이슈 01의 상태 파일 스키마와 호환
+- [ ] 페르소나 파일이 이슈 01의 JSON 스키마(5층 + corrections)대로 생성
+- [ ] 저장 경로: `$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json` (id = 관계+이름 slug, 예: `boss-kim`)
+- [ ] 멀티 페르소나: personas/ 디렉토리 내 파일 여러 개로 관리
