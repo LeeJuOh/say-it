@@ -3,112 +3,77 @@ topic: say-it-contract-grill
 date: 2026-06-06
 ---
 
-# say-it — 구현 계약 그릴 + 이슈 쪼개기
+# say-it — 이슈 스펙 grill 완료, 빌드 준비
 
 ## Goal
 
-say-it PRD의 구현 계약 3종 확정 → 세로 슬라이스 이슈 생성 → skill-creator-pro 관점 검수. **계약 3종 완료, 이슈 9개 로컬 생성 완료, 검수 2라운드 전부 완료. 빌드 준비 끝.**
+say-it 플러그인(마켓 배포) 빌드. PRD 계약 확정 → 이슈 9개 생성 → 이슈 스펙 grill 2라운드 → 빌드.
 
 ## First Action
 
-**빌드 레포**: `~/Desktop/project/zero-code/say-it` (이 레포, 플러그인).
-**설계 문서**: 이 레포 내 `docs/prd/PRD.md`, `docs/adr/`, `CONTEXT.md`.
-
-say-it 레포에서 세션 열고 `/skill-creator-pro`로 이슈 01부터 빌드:
+say-it 레포에서 이슈 01(hook 인프라)부터 빌드:
 
 ```
-/skill-creator-pro
-
-say-it 플러그인 빌드. 
-이슈: docs/issues/01-hook-infra.md
-PRD: docs/prd/PRD.md
-ADR: docs/adr/
-yourself-skill 참조: ~/Desktop/project/zero-code/references/yourself-skill/
+docs/issues/01-hook-infra.md 분석해서 구현 진행
 ```
 
-01 끝나면 02 → 03 → ... 순서대로. 빌드 순서는 아래 표 참조.
+01 + 02 병렬 가능. 이후 빌드 순서는 아래 표 참조.
 
 ## Context
 
-grill-with-docs로 PRD 계약 3종 잠그고, to-issues로 세로 슬라이스 9개 쪼갬. 처음 GitHub Issues로 발행했다가 유저가 로컬 원해서 닫고 `docs/say-it/issues/`로 이전. 이후 skill-creator-pro 관점 검수 2라운드 완료.
-
-유저 특성: caveman ultra + 한국어, 백엔드 비유, 추천 먼저 제시(떠넘기지 말 것), 너무 압축/jargon이면 "이해되게 말해"로 리셋.
+이전 세션에서 PRD 계약 3종 확정 + 이슈 9개 생성 + skill-creator-pro 관점 검수 완료. 이번 세션에서 grill-with-docs로 이슈 하나씩 줌아웃 → 개선안 제시 → 승인 후 수정. 커밋 `d718c92`.
 
 ## Current Progress
 
-### 계약 3종 — 전부 완료
+working tree 클린. 모든 변경 커밋 완료.
 
-| # | 결정 | 근거 위치 |
+### 이슈 grill 결과 (이번 세션)
+
+| 이슈 | 변경 |
+|---|---|
+| 01 | references/ 번들 정리(brainstorm/yourself 제거), 플러그인 scaffold criteria 추가, persona JSON 스키마(5층+corrections) 정의, stage 네이밍(vent/role-swap/integration/closure) |
+| 02 | 저장 경로 `$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json`, 멀티 페르소나 규약 |
+| 03 | 이슈 05(S2 역할교대) 합류, 재방문 가드 테스트 시점 명시(빈 로그=단독 테스트, 로그 있음=이슈 06 후 통합 테스트) |
+| 04 | 단계 전환 메커니즘 추가(`scripts/transition_stage.sh`, 앞으로만 전이), 턴캡 stage명 반영 |
+| 05 | → 03에 merged (프롬프트 전용이라 독립 슬라이스 불필요) |
+| 06 | stage 네이밍 반영(S3→integration, S4→closure), 의존성 05→03 |
+| 07 | false positive 경계 추가 — 상대 향 격앙=정상, 유저 자신 향=가드 발동 |
+| 08, 09 | 변경 없음 |
+
+### 빌드 순서
+
+| 순서 | 이슈 | 블로커 |
 |---|---|---|
-| 이슈 정의 | `(persona, grievance-theme)` 튜플 | `docs/say-it/CONTEXT.md` |
-| 상태/틱 | skill+hook, 상태=파일, 틱=hook | `docs/say-it/adr/0004-...md` |
-| 유사도 매칭 | 비교=입구(S1 앞머리, 모델 판단), 저장=출구(S4, dedup+정확문자열). 오판=soft fail | `docs/say-it/CONTEXT.md` + PRD |
-
-### 이슈 — 로컬 9개 생성, 검수 완료
-
-빌드 순서 (의존 그래프 기준):
-
-| 순서 | 이슈 | 스킬 | 블로커 | 핵심 |
-|---|---|---|---|---|
-| **1** | 01-hook-infra | `/say-it` | 없음 | hook 뼈대 + 상태 파일 3종 + references/ 번들 + settings.json 등록 |
-| **1** | 02-persona-builder | `/say-it-build` | 없음 | 5층 intake + 관계 맥락 빌드 (01과 병렬 가능) |
-| **2** | 03-s1-vent | `/say-it` | 01, 02 | S1 봇 렌더러 + 재방문 가드 입구 + 페르소나 선택 |
-| **2** | 04-turn-cap | `/say-it` | 01 | 8턴 소프트캡 + 1회 연장 + 11턴 하드천장 |
-| **2** | 07-distress-breaker | `/say-it` | 01 | HARD regex + SOFT 프롬프트 + 2등급 대응 |
-| **3** | 05-s2-role-swap | `/say-it` | 03 | 역할교대 스캐폴딩 |
-| **4** | 06-s3-s4-wrapup | `/say-it` | 05 | S3 통합 + S4 4비트 + takeaway 저장 |
-| **4** | 08-persona-correction | `/say-it` | 03 | 세션 중 교정 피드백 |
-| **5** | 09-integration-smoke | 둘 다 | 전부 | 전체 워크스루 eval (사람 리뷰) |
-
-### 검수 — 2라운드 전부 완료
-
-**1라운드: 구현 문제 6건 → 전부 반영 완료.**
-
-**2라운드: skill-creator 관점 7건 → 전부 완료:**
-
-| # | 문제 | 결과 |
-|---|---|---|
-| 1 | ~~hook vs skill 경계~~ | 철회 |
-| 2 | ~~SKILL.md 생성 시점~~ | #3에 종속 |
-| 3 | 커맨드 구조 | A안 확정 — `/say-it-build` + `/say-it` 2개 split |
-| 4 | references/ 번들 | 이슈 01에 준비 단계 추가 |
-| 5 | SKILL.md 누적 관계 | 이슈 01~08에 "SKILL.md 영향" 한 줄씩 추가 |
-| 6 | eval 기준 | 패스 — 빌드 시 skill-creator-pro가 생성 |
-| 7 | settings.json 배선 | 이슈 01 acceptance criteria에 추가 |
+| **1** | 01-hook-infra | 없음 |
+| **1** | 02-persona-builder | 없음 |
+| **2** | 03-s1-vent (+S2) | 01, 02 |
+| **2** | 04-turn-cap | 01 |
+| **2** | 07-distress-breaker | 01 |
+| **3** | 06-s3-s4-wrapup | 03 |
+| **3** | 08-persona-correction | 03 |
+| **4** | 09-integration-smoke | 전부 |
 
 ## Decisions Made
 
 | 결정 | 근거 |
 |---|---|
-| 계약 3종 (위 표) | grill-with-docs 산출물 |
-| 재방문 가드 타이밍 = "비교는 입구에서, 저장은 출구에서" | WAF 비유 — 처리 끝나고 차단하면 의미 없음 |
-| 입구 비교 = S1 앞머리 포함 (별도 S0 안 만듦) | 4단계 상태머신 유지 |
-| 이슈 GitHub→로컬 이전 | 유저 요청. GitHub issues #2~#10 closed |
-| 커맨드 구조 = A안(2스킬 split) | `/say-it-build`(빌드) + `/say-it`(세션). 페르소나 여럿이라 자동 분기보다 멘탈모델 분리가 깔끔 |
+| stage 값 = `vent/role-swap/integration/closure` | S1~S4는 의미 불명 |
+| persona 스키마 = JSON, 5층(L0~L4) + corrections 배열 | hook이 프로그래밍적으로 읽어야 함 + 이슈 08 교정 누적 |
+| 저장 경로 = `$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json` | 플러그인 환경변수 활용 |
+| 이슈 05 → 03 합류 | 프롬프트 전용, 결정적 코드 0개, 독립 슬라이스 불필요 |
+| 단계 전환 = 모델→`scripts/transition_stage.sh`→session_state 갱신 | takeaway 저장과 동일 패턴(모델→스크립트→상태 파일) |
+| references/ 번들에서 brainstorm.md, yourself 스니펫 제거 | 내용이 이미 PRD+ADR+이슈에 증류됨 |
+| 디스트레스 핫라인 = 제품 책임(주의의무) | 제품이 감정 격앙 상황을 만드므로 프로바이더 맡김만으론 부족. 출시 전 법률 검토 필요 |
 
 ## What Didn't Work
 
-- **GitHub Issues로 발행** — 유저가 로컬 원함. 9개 닫고 `docs/say-it/issues/`로 이전.
-- **검수 1라운드에서 "hook vs skill 경계" 지적** — skill-creator-pro가 hook도 빌드 가능하므로 무의미한 구분. 철회.
-- **"정확 문자열 매칭" 용어 혼동** — 입구(모델 판단)와 출구(정확매칭)를 구분 안 해서 이슈에 오해 소지. 수정 완료.
-- **설명 과압축** — "하나도 못 알아먹겠어" 피드백. plain하게, 비유로 설명할 것.
-- **B안(1스킬 자동분기) 시도** — 페르소나 여럿일 때 빌드/세션 구분 애매. A안(2스킬)으로 확정.
-- **핸드오프 문서에 "확정" 적혀 있는데 유저가 아직 확정 안 한 상태** — 문서만 보고 확정으로 밀지 말고 확인할 것.
-
-## Next Steps
-
-1. 새 세션에서 `/skill-creator-pro`로 이슈 01부터 빌드
-2. 01 + 02 병렬 가능 → 03+04+07 → 05 → 06+08 → 09
-3. say-it 변경만 선별 커밋 (`git add -A` 금지)
-
-## ⚠️ Working Tree 주의
-
-say-it과 무관한 변경 다수 미커밋 (wiki ingest 등). **say-it 커밋 시 `git add -A` 금지** — `docs/say-it/` 만 선별 스테이징.
+- **"scripts/ 디렉토리 규약" 별도 정의 제안** — 과잉. 각 스크립트 인터페이스는 해당 이슈에서 정의하면 충분
+- **"상태 파일 경로 미정" 지적** — 플러그인 환경변수 쓰면 끝. 유저가 즉시 반박
+- **S1/S2/S3/S4 약어 사용** — 유저가 "이따위" 반응. 의미 있는 이름으로 교체
 
 ## Reference
 
-- PRD: `docs/say-it/PRD.md`
-- 글로서리: `docs/say-it/CONTEXT.md`
-- ADR 0001~0004: `docs/say-it/adr/`
-- 이슈 01~09: `docs/say-it/issues/`
-- brainstorm: `docs/say-it/brainstorm.md`
+- PRD: `docs/prd/PRD.md`
+- 글로서리: `CONTEXT.md`
+- ADR 0001~0004: `docs/adr/`
+- 이슈 01~09: `docs/issues/`
