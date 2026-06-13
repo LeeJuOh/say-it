@@ -1,5 +1,18 @@
-Status: ready-for-agent
+Status: done
 Blocked by: None
+
+> **Closed** in commit `aaa1d8a` (feat(hook-infra)). State lib + 3 schemas +
+> hook + CLIs + SKILL.md draft + references bundle + 28 unit tests (green).
+> Two intentional deviations from the acceptance list below: (a) PRD/ADRs are
+> NOT bundled into references/ (runtime never reads them; the build reads them
+> in-repo from docs/) — see the note on the references criterion; (b) the
+> bundle lives under `skills/say-it/references/`, not repo-root `references/`
+> (which is a gitignored symlink to local reference projects). SAFETY.md is a
+> stub owned by issue 10. The one remaining check — a live in-context
+> confirmation of the system-reminder injection — is left to the human (an
+> agent can't reload its own plugins); the hook is verified at the subprocess
+> level (valid `hookSpecificOutput.additionalContext`, turn increments, gate
+> stays silent when inactive).
 
 # Hook 인프라 + 세션 상태 파일
 
@@ -42,13 +55,13 @@ Hook stdout → Claude Code가 `<system-reminder>`로 모델 컨텍스트에 주
 
 ## Acceptance criteria
 
-- [ ] UserPromptSubmit hook이 매 유저 메시지마다 실행됨
-- [ ] session_state.json 생성/갱신: stage(vent/role-swap/integration/closure), turn count, extension flag
-- [ ] takeaway_log.json: append-only, theme label + takeaway per session
-- [ ] 매 턴 틱이 turn count를 +1
-- [ ] Hook stdout → system-reminder로 모델 컨텍스트에 주입 확인
-- [ ] persona 파일 JSON 스키마 정의 (5층 + corrections 배열)
-- [ ] 상태 파일 읽기/쓰기/증분 유닛테스트
-- [ ] 플러그인 폴더 scaffold 확정 + manifest.json 생성
-- [ ] references/에 PRD, ADR 4개, conflict-vocabulary.md, SAFETY.md(이슈 10) 번들
-- [ ] settings.json에 hook 등록 + `/say-it` 스킬 활성 시에만 실행 조건
+- [x] UserPromptSubmit hook이 매 유저 메시지마다 실행됨 (hooks.json, no matcher = global)
+- [x] session_state.json 생성/갱신: stage(vent/role-swap/integration/closure), turn count, extension flag
+- [x] takeaway_log.json: append-only, theme label + takeaway per session
+- [x] 매 턴 틱이 turn count를 +1
+- [~] Hook stdout → system-reminder로 모델 컨텍스트에 주입 확인 — subprocess 레벨 검증 완료 (valid `hookSpecificOutput.additionalContext`); 라이브 in-context 확인은 human 몫
+- [x] persona 파일 JSON 스키마 정의 (5층 + corrections 배열)
+- [x] 상태 파일 읽기/쓰기/증분 유닛테스트 (28 tests, green)
+- [x] 플러그인 폴더 scaffold 확정 + manifest 생성 (`.claude-plugin/plugin.json`, not `manifest.json` — spec 정정)
+- [~] references 번들 — conflict-vocabulary.md ✅ / SAFETY.md stub ✅ / schemas ✅. **PRD·ADR 4개는 의도적 제외** (런타임 미사용, build는 docs/서 직접 읽음 → 중복/드리프트 회피). 위치 = `skills/say-it/references/` (repo-root `references/`는 참고-프로젝트 심링크, gitignore)
+- [x] hook 등록 + `/say-it` 활성 시에만 실행 — `hooks/hooks.json` (not settings.json — spec 정정) + `session_state.active` 게이트
