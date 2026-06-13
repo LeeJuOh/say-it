@@ -1,5 +1,5 @@
 Status: ready-for-human
-Blocked by: 01-hook-infra, 02-persona-builder, 03-s1-vent, 04-turn-cap, 05-s2-role-swap, 06-s3-s4-wrapup, 07-distress-breaker
+Blocked by: 01-hook-infra, 02-persona-builder, 03-s1-vent, 04-turn-cap, 06-s3-s4-wrapup, 07-distress-breaker, 10-safety-disclosure
 
 # 통합 스모크 eval (전체 세션 워크스루)
 
@@ -15,6 +15,7 @@ Blocked by: 01-hook-infra, 02-persona-builder, 03-s1-vent, 04-turn-cap, 05-s2-ro
 좁은 eval = 좁은 보장. 다양성 자체가 일반화 동력.
 
 **체크 포인트:**
+- 진입: 안전 고지 1회 표시 (치료아님 + "내 인식 속 그 사람" + 힘들면 핫라인, 이슈 10)
 - S1: 받는 모드, edges 유지, 공격 안 함
 - S2: 역할교대 스캐폴딩, 유저 연기 유도
 - S3: 반추→문제해결 전환
@@ -23,6 +24,7 @@ Blocked by: 01-hook-infra, 02-persona-builder, 03-s1-vent, 04-turn-cap, 05-s2-ro
 
 ## Acceptance criteria
 
+- [ ] 진입 시 안전 고지 표시 확인 (이슈 10)
 - [ ] 전체 세션 워크스루가 에러 없이 완료
 - [ ] eval이 관계×감정×분출 교차 커버
 - [ ] 각 단계 톤 리뷰 통과 (사람 판단)
