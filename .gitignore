@@ -1,0 +1,11 @@
+# Reference projects consulted while building say-it. This is a symlink to a
+# shared scratch directory of cloned repos — NOT part of the plugin. The
+# plugin's own bundled docs live under skills/say-it/references/.
+/references
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# Local say-it session data when SAY_IT_DATA_DIR points inside the repo (dev only)
+/.sayit-data/

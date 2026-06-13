@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "say-it/session_state.schema.json",
+  "title": "say-it session_state",
+  "description": "Within-session runtime state: the values that change as one empty-chair session runs (current stage, turn count, extension flag). Owned by the per-turn hook tick (ADR 0004), NOT by the conversation context. The `active` flag is the gate that tells the globally-firing UserPromptSubmit hook whether a say-it session is in progress. Single live file at <data_dir>/session_state.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "active", "stage", "turn"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "active": {
+      "type": "boolean",
+      "description": "True while a /say-it session is running. The hook ticks and injects state only when this is true; otherwise it stays silent. Set true by session_start, false by session_end/closure."
+    },
+    "session_id": {
+      "type": ["string", "null"],
+      "description": "Claude Code session id this state belongs to (from the hook event)."
+    },
+    "persona_id": {
+      "type": ["string", "null"],
+      "description": "Which persona this session is about (matches personas/<id>.json)."
+    },
+    "theme_label": {
+      "type": ["string", "null"],
+      "description": "The (persona, grievance-theme) issue label. Null until closure (label is confirmed and the takeaway is saved at the exit, per 'compare at entry, store at exit'). Used by the revisit guard."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["vent", "role-swap", "integration", "closure"],
+      "description": "The empty-chair arc stage. S1 vent -> S2 role-swap -> S3 integration -> S4 closure."
+    },
+    "turn": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "User turns counted in this session. Incremented +1 by the hook tick every user message."
+    },
+    "extension_used": {
+      "type": "boolean",
+      "description": "Whether the one-time (+3 turn) extension past the soft cap has been spent. Enforcement lives in issue 04; this flag is the deterministic record."
+    },
+    "started_at": { "type": ["string", "null"], "description": "ISO-8601 timestamp of session start." },
+    "updated_at": { "type": ["string", "null"], "description": "ISO-8601 timestamp of the last tick." },
+    "guards": {
+      "type": "object",
+      "description": "Per-turn guard results computed by the hook. Distress detection is a wired SEAM here (issue 07 fills the keyword patterns); turn-cap soft/hard flags are computed deterministically now (issue 04 owns enforcement copy).",
+      "additionalProperties": false,
+      "properties": {
+        "distress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["triggered", "tier"],
+          "properties": {
+            "triggered": { "type": "boolean" },
+            "tier": {
+              "type": ["string", "null"],
+              "enum": ["panic", "acute-harm", null],
+              "description": "null when clear. 'panic' -> stop + de-escalate; 'acute-harm' -> stop + crisis hotline + no resume (ADR 0003)."
+            }
+          }
+        },
+        "turn_cap": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["soft", "hard", "soft_hit", "hard_hit"],
+          "properties": {
+            "soft": { "type": "integer", "description": "Soft cap turn count (default 8)." },
+            "hard": { "type": "integer", "description": "Hard ceiling turn count (default 11)." },
+            "soft_hit": { "type": "boolean", "description": "turn >= soft." },
+            "hard_hit": { "type": "boolean", "description": "turn >= hard." }
+          }
+        }
+      }
+    }
+  }
+}

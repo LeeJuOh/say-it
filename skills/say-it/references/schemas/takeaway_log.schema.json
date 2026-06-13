@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "say-it/takeaway_log.schema.json",
+  "title": "say-it takeaway_log",
+  "description": "Across-session, append-only log of session takeaways. One entry per finished session: the confirmed theme label plus the takeaway in the user's own words, stored RAW (no summarizing/compression) so same-issue similarity matching stays accurate. Read by the hook at session entry (exact-string match for the revisit guard, issue 03); written by the model via a script at closure (issue 06). Single file at <data_dir>/takeaway_log.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "entries"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "entries": {
+      "type": "array",
+      "description": "Append-only. Never mutate or remove existing entries.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["persona_id", "theme_label", "takeaway", "at"],
+        "properties": {
+          "persona_id": {
+            "type": "string",
+            "description": "Which persona this issue is about. Matching is at the (persona_id, theme_label) tuple = the 'issue'."
+          },
+          "theme_label": {
+            "type": "string",
+            "description": "Structural label identifying the grievance theme, e.g. 'boss/credit-theft'. Revisit-guard matching is EXACT string on (persona_id, theme_label): same person + same theme = same issue (guard fires); same person + different theme = different issue (passes)."
+          },
+          "takeaway": {
+            "type": "string",
+            "description": "The takeaway in the user's own words, RAW. No summary or compression."
+          },
+          "session_id": { "type": ["string", "null"] },
+          "at": { "type": "string", "description": "ISO-8601 timestamp of when the session closed." }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,123 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "say-it/persona.schema.json",
+  "title": "say-it persona",
+  "description": "The build artifact of /say-it-build: a 5-layer representation of 'the person as I perceive them' (an internal object, NOT the real person). Built from the user's own narration; blank fields are filled by inference that extrapolates along the grain of that narration, never from demographic/zodiac/MBTI stereotypes. This file defines the SHAPE only; actual construction lives in issue 02. Stored at <data_dir>/personas/<id>.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "id", "layers", "corrections"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "id": {
+      "type": "string",
+      "description": "Stable slug = relationship + name, e.g. 'boss-kim'. Also the filename stem.",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "display_name": {
+      "type": "string",
+      "description": "How the user refers to this person, in their own words/language (may be non-English)."
+    },
+    "relationship": {
+      "type": "string",
+      "description": "One-line relationship label, e.g. 'workplace boss', 'mother', 'ex-partner'."
+    },
+    "layers": {
+      "type": "object",
+      "description": "The 5-layer structure borrowed from yourself-skill, flipped to 2nd person. L4 is the say-it-specific layer (relationship dynamics replacing yourself's 'Self Memory').",
+      "additionalProperties": false,
+      "required": [
+        "L0_hard_rules",
+        "L1_identity",
+        "L2_voice",
+        "L3_emotional_triggers",
+        "L4_relationship_dynamics"
+      ],
+      "properties": {
+        "L0_hard_rules": {
+          "type": "array",
+          "description": "Things the persona NEVER does. The safety/immersion floor: no escalation to verbal abuse, no attacking the user, and crucially no suddenly-turning-nice fake apology/comfort. Sourced partly from the intake 'what would this person never say/do?' (negative space) question.",
+          "items": { "type": "string" },
+          "minItems": 1
+        },
+        "L1_identity": {
+          "type": "object",
+          "description": "Who they are: identity, role, relation to the user.",
+          "additionalProperties": true,
+          "properties": {
+            "who": { "type": "string" },
+            "role": { "type": "string" },
+            "relation_to_user": { "type": "string" }
+          }
+        },
+        "L2_voice": {
+          "type": "object",
+          "description": "How they talk: tone, verbal tics, what they call the user.",
+          "additionalProperties": true,
+          "properties": {
+            "tone": { "type": "string" },
+            "verbal_tics": { "type": "array", "items": { "type": "string" } },
+            "calls_user": { "type": "string" }
+          }
+        },
+        "L3_emotional_triggers": {
+          "type": "array",
+          "description": "What sets them off and what of the user's they poke. Each entry pairs a trigger with the resulting reaction.",
+          "items": {
+            "type": "object",
+            "additionalProperties": true,
+            "required": ["trigger", "reaction"],
+            "properties": {
+              "trigger": { "type": "string" },
+              "reaction": { "type": "string" }
+            }
+          }
+        },
+        "L4_relationship_dynamics": {
+          "type": "object",
+          "description": "The say-it-specific layer: conflict patterns, the typical fight, what the user wants (the session arc's destination), and the ambivalence field.",
+          "additionalProperties": true,
+          "required": ["ambivalence"],
+          "properties": {
+            "conflict_pattern": { "type": "string" },
+            "typical_fight": { "type": "string" },
+            "what_user_wants": {
+              "type": "string",
+              "description": "The session arc's target point — what the user actually wanted from this person."
+            },
+            "ambivalence": {
+              "type": "string",
+              "description": "REQUIRED. The contradiction in the PERSON'S OWN behavior, preserved rather than smoothed away (e.g. 'cold and dismissive, then occasionally checks in out of nowhere'). The unresolved contradiction is the engine of rumination, so it is a core field, not decoration. The USER'S own emotional ambivalence belongs in relationship context, not here. cf CONTEXT.md."
+            }
+          }
+        }
+      }
+    },
+    "provenance": {
+      "type": "object",
+      "description": "Per-layer marker of whether content came from the user's narration ('narrated') or was inferred to fill a blank ('inferred'). Drives the build preview so the user can correct inferred layers (issue 02).",
+      "additionalProperties": {
+        "type": "string",
+        "enum": ["narrated", "inferred", "mixed"]
+      }
+    },
+    "corrections": {
+      "type": "array",
+      "description": "Append-only log of user corrections ('the real person isn't like that') applied over time to pull the persona closer to the user's perception (issue 08).",
+      "items": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["at", "layer", "note"],
+        "properties": {
+          "at": { "type": "string", "description": "ISO-8601 timestamp." },
+          "layer": {
+            "type": "string",
+            "enum": ["L0_hard_rules", "L1_identity", "L2_voice", "L3_emotional_triggers", "L4_relationship_dynamics"]
+          },
+          "from": { "type": "string" },
+          "to": { "type": "string" },
+          "note": { "type": "string" }
+        }
+      }
+    }
+  }
+}
