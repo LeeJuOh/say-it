@@ -6,7 +6,7 @@
 >
 > **씨앗(seed)**: 완성본 아님. 15개로 시작, 빌드·운영하며 늘림.
 >
-> **번들 경로**: 설계 단계엔 `docs/references/`에 거주. **빌드 시 `/say-it-build` 스킬의 `references/`로 번들** (PRD·ADR과 동일 패턴, [이슈 01](../issues/01-hook-infra.md) 참조).
+> **번들 경로**: 설계 단계엔 `docs/references/`에 거주. **빌드 시 `/say-it-build` 스킬의 `references/`로 번들** (PRD·ADR과 동일 패턴, [이슈 01](../issues/done/01-hook-infra.md) 참조).
 
 ## 사용 원칙 (빌더가 지킬 것)
 
