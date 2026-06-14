@@ -18,9 +18,10 @@ This skill runs one structured empty-chair session against a persona the user
 already built with `/say-it-build`. The session has four stages and is held on
 the rails by a per-turn hook and three state files. This file specifies how to
 read the hook's injected state, how to drive the session lifecycle, and how to
-facilitate **S1 (vent)** and **S2 (role-swap)**. The S3/S4 facilitation
-(integration → closure, with the takeaway save) lands in issue 06; until then the
-lifecycle's Close step below is the contract those stages will fill in.
+facilitate all four stages — **S1 (vent)**, **S2 (role-swap)**,
+**S3 (integration)**, and **S4 (closure)**. S4 is where the takeaway gets a theme
+label and is saved, which is what later lets a returning user be recognized as
+back on a knot they already worked (the entry revisit gate, step 2).
 
 ## The session arc (4 stages)
 
@@ -99,8 +100,8 @@ Each line is a persona `id`. Branch on the count:
   the persona schema yet (persona correction owns that — issue 08), so this branch
   is a documented no-op for now: don't invent the flag here, just leave the seam.
 
-**2. Entry revisit check (semantic; a no-op until issue 06 has saved labels).**
-Before vent, catch the case where the user is back on a knot they already worked —
+**2. Entry revisit check (semantic; a no-op on the first session, live once
+closures exist).** Before vent, catch the case where the user is back on a knot they already worked —
 rumination is "the same content, unresolved, on a loop," so a return to the *same
 issue* deserves a gentle mirror, not a fresh round. Get the user's opening (what's
 on their mind about this person right now), then pull the prior issues for this
@@ -111,9 +112,10 @@ python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'
 ```
 
 This prints `[]` when the log is empty or has nothing for this persona — that is
-the **no-op**: pass straight to step 3. (First session always lands here, which is
-what makes this slice testable standalone. The guard only really bites once issue
-06 has saved label+takeaway entries.)
+the **no-op**: pass straight to step 3. (A first session always lands here. The
+guard only bites once a closure has saved a label+takeaway entry for this persona —
+which the S4 module below now does, so on return visits the log has something to
+mirror.)
 
 When it prints prior issues, **you** judge the match — read the user's opening
 against those `theme` labels semantically (natural language → label), not by string
@@ -146,13 +148,13 @@ session.
 
 **4. Run the stages.** Facilitate `vent` → `role-swap` → `integration` →
 `closure`, reading `stage`/`turn`/guards from the injected reminder each turn. The
-S1 and S2 facilitation is below; S3/S4 is issue 06. You move the session forward
-yourself with `scripts/transition_stage.sh` — see "Advancing the stage + the vent
-turn cap" above for when (cap invitation, stage complete) and how (forward-only,
-one-time extend).
+per-stage facilitation (S1–S4) is below. You move the session forward yourself with
+`scripts/transition_stage.sh` — see "Advancing the stage + the vent turn cap" above
+for when (cap invitation, stage complete) and how (forward-only, one-time extend).
 
-**5. Close (S4, issue 06).** When the takeaway is confirmed in the user's own
-words, persist it, then end the session:
+**5. Close (S4).** When the takeaway is confirmed in the user's own words, settle
+its theme label (dedup against the existing labels — see the S4 module for how),
+persist it, then end the session:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_takeaway.py" \
@@ -162,7 +164,8 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
 
 `session_end.py` flips `active` to false so the hook goes quiet. The session is
 force-closed on one takeaway line — don't let it run on into between-session
-rumination.
+rumination. The "S4 — closure" module below is the facilitation that fills these
+two calls in: the four closure bits, the label dedup, and the closing-line tone.
 
 ## Advancing the stage + the vent turn cap
 
@@ -282,8 +285,119 @@ surface still counts — carry that forward. A graceful no is a fine outcome; a 
 yes isn't.
 
 (The stage machinery that brings you here — and carries you onward — is
-`transition_stage.sh` (above). S3 integration and S4 closure facilitation land in
-issue 06. This module is the S2 content you run while `stage` is `role-swap`.)
+`transition_stage.sh` (above). This module is the S2 content you run while `stage`
+is `role-swap`; S3 and S4 follow below, in the order the session reaches them.)
+
+## S3 — integration: back in your own chair, what did you actually want?
+
+When `stage` flips to `integration`, the user comes back to their own seat and you
+are the facilitator again (not the persona). The turn this stage makes is the
+therapeutic spine of the whole arc: S1 and S2 are *about the other person* — pouring
+out at them, then voicing them — and S3 turns the user back toward *themselves and
+what's next*. That move is rumination → problem-solving (RF-CBT): looping on the
+feeling ("I can't believe they did that") is what keeps the knot live; naming what
+you actually *wanted* converts it into something you can act on and put down.
+
+**The one question that does the work: "so what did you actually want from them?"**
+Recognition? An apology? To be left alone? To be taken seriously? Help the user
+name it concretely, in want-terms rather than blame-terms — the deliverable here is
+*one clear want, named*, which becomes the seed of the closure takeaway. Nudge
+toward it; don't script it:
+
+> "Underneath all of that — what were you actually hoping they'd do, or say?"
+> "If they'd given you one thing in that moment, what would've made it land
+> differently?"
+
+Keep it short and forward-leaning. Two failure modes to steer off: **don't re-open
+the vent** — sliding back into "and another thing they did…" is the loop the cap
+exists to interrupt, and you can't go back a stage anyway. And **don't try to solve
+their life** — S3 isn't advice-giving or action-planning, it's getting one honest
+want into words. When that want is named, carry it into closure:
+`transition_stage.sh closure`.
+
+## S4 — closure: name the knot, own it, set it down
+
+When `stage` flips to `closure`, you bring the session to a close in four small
+beats and one closing line, then force-end it. This is where the loose thread gets
+tied and *saved* — the label you settle here is what a future session matches a
+revisit against (step 2). Don't compress all four bits into one message, and don't
+let them sprawl either: the force-close at the end is deliberate, because
+rumination's natural habitat is the open-ended after-session replay, and a closure
+that drifts is just that replay with extra steps.
+
+**Bit 1 — draft the takeaway (you offer it first).** Hand the user a first draft of
+what they landed on, built from the want they named in S3: *"sounds like it was
+never really about the apology — you wanted them to admit you did the work. that
+about right?"* A draft is far easier to react to than a blank "so what did you
+learn?" — it gives them something concrete to push against or correct.
+
+**Bit 2 — the user owns it in their own words.** A bare "yeah" doesn't set the knot.
+The takeaway only sticks when the user re-articulates it *themselves* — the act of
+putting it in their own mouth is what makes it theirs rather than your tidy summary
+they nodded at. So if they just agree, ask again, lighter: *"say it how it actually
+sits for you."* What you save in bit 4 is **their** sentence, raw — not your draft.
+
+**Bit 3 — the fiction reminder (cognitive defusion).** Before you close, set the
+frame down one more time: the person in that chair was *the user's memory of them*,
+a model the user built — not the real person, and not a verdict from them. This is
+deliberate defusion. It stops the session from manufacturing a counterfeit intimacy
+or a dependence on the bot, and it keeps the user from walking out thinking they got
+the *actual* person's blessing or forgiveness. Light touch, not a disclaimer dump:
+*"and that was them as you carry them — not the real one. the real one you'll handle
+on your own terms, when you choose to."*
+
+**Bit 4 — settle the label, then save.** Now the takeaway gets filed under a theme
+label so a later session can recognize this knot. First pull the labels this persona
+already has:
+
+```bash
+python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(json.dumps(sorted({e['theme_label'] for e in st.load_log(st.data_dir())['entries'] if e['persona_id'] == '<id>'}), ensure_ascii=False))"
+```
+
+Then dedup by **exact string match** — this is a deterministic call, not a vibe. If
+this knot is the *same issue* as an existing label (the user is back on
+`boss/credit-theft`), **reuse that exact label string** so the new entry lands under
+the same issue. Only mint a new label — `area/short-slug`, e.g. `boss/micromanaging`
+— when it's genuinely a different grievance. Exactness is load-bearing: the entry
+gate (step 2) and `find_revisit` both key on the literal string, so a "close enough"
+relabel here (`boss/credit` vs `boss/credit-theft`) silently splits one issue across
+two labels and breaks revisit detection later. Save the confirmed label and the
+user's raw words:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_takeaway.py" \
+  --persona <id> --theme "<confirmed label>" --takeaway "<the user's own sentence, raw>"
+```
+
+The takeaway goes in **raw** — don't summarize or tidy it. The next session's
+revisit check compares against these words; it only stays accurate if they're the
+user's actual sentence, not your compression of it.
+
+**Bit 5 — the closing line (the tone is the whole thing).** End warm but plain.
+You're closing *one knot*, not graduating the user from therapy and not sending off
+the person. The two ways to get it wrong:
+
+- **Clinical** — "Takeaway saved. Session ended." treats the thing they just did as
+  a transaction. It isn't one. Don't close like a receipt.
+- **Heavy therapy-speak** — "you're doing so well, I'm so proud of how much you've
+  grown" overclaims and shatters the "light one round" frame. Don't.
+
+The register is a friend after you've set something down together: *"alright — you
+put that one down. nice work."* And the load-bearing distinction: you put down *this
+one knot*, **never the person**. They're alive; the user sees them tomorrow. "you
+set this knot down" ⭕ / "you said goodbye to them" ❌ — goodbye-to-the-person is both
+false (they'll be in the next meeting) and the wrong frame (this is one round, not a
+funeral).
+
+Then force-close — one takeaway line, session ends, no drifting on:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
+```
+
+`session_end.py` flips `active` to false so the hook goes quiet. Don't keep the
+conversation going past this — the force-close *is* the anti-rumination guard at the
+exit, the bookend to the entry gate. The knot is down; the round is over.
 
 ## Framing (always on)
 

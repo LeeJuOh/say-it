@@ -12,7 +12,9 @@ suite is order-independent. Run from the repo root::
     python3 -m unittest discover -s tests -v
 """
 
+import json
 import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -478,6 +480,64 @@ class TestDataDirResolution(unittest.TestCase):
         os.environ["SAY_IT_DATA_DIR"] = "/dev/override"
         os.environ["CLAUDE_PLUGIN_DATA"] = "/prod"
         self.assertEqual(st.data_dir(), Path("/dev/override"))
+
+
+_SCRIPTS = Path(__file__).resolve().parent.parent / "scripts"
+
+
+class TestSaveTakeawayCLI(StateTestCase):
+    """The closure write path (issue 06) goes model -> save_takeaway.py CLI, not
+    through the library directly. The append correctness lives in TestTakeawayLog;
+    these drive the *CLI* end to end on disk, so the seam the closure flow actually
+    invokes (arg parsing -> data_dir resolution -> atomic append) can't rot
+    unnoticed. SAY_IT_DATA_DIR points the script at the test's tmp dir."""
+
+    def _run(self, *args):
+        env = dict(os.environ, SAY_IT_DATA_DIR=str(self.dd))
+        return subprocess.run(
+            [sys.executable, str(_SCRIPTS / "save_takeaway.py"), *args],
+            capture_output=True, text=True, env=env)
+
+    def test_cli_appends_entry_to_log(self):
+        res = self._run("--persona", "boss-kim",
+                        "--theme", "boss/credit-theft",
+                        "--takeaway", "I wanted credit, not an apology.")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        entries = st.load_log(self.dd)["entries"]
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(entries[0]["persona_id"], "boss-kim")
+        self.assertEqual(entries[0]["theme_label"], "boss/credit-theft")
+
+    def test_cli_preserves_takeaway_raw(self):
+        # Raw preservation matters: the revisit check compares the user's actual
+        # words, so the CLI must not summarize/normalize. A language-neutral
+        # accented string with em-dash + quotes is the encoding case most likely
+        # to be silently mangled, while keeping this source ASCII-only (the
+        # plugin's English-source rule, same trick as the persona test above).
+        raw = "Wanted crédito — not «sorry». \"You did it\" was all I needed."
+        res = self._run("--persona", "boss-kim", "--theme", "boss/credit-theft",
+                        "--takeaway", raw)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertEqual(st.load_log(self.dd)["entries"][0]["takeaway"], raw)
+
+    def test_cli_writes_valid_json(self):
+        # JSON integrity: the on-disk file must be parseable and carry the
+        # schema_version + entries shape the hook reads back every turn.
+        self._run("--persona", "boss-kim", "--theme", "boss/credit-theft",
+                  "--takeaway", "first")
+        with open(self.dd / "takeaway_log.json", encoding="utf-8") as fh:
+            doc = json.load(fh)
+        self.assertEqual(doc["schema_version"], st.SCHEMA_VERSION)
+        self.assertIsInstance(doc["entries"], list)
+
+    def test_cli_append_only_across_invocations(self):
+        # Two separate process invocations (a second session) must not clobber the
+        # first — append-only has to hold across the real CLI boundary, not just
+        # in-process.
+        self._run("--persona", "boss-kim", "--theme", "boss/credit-theft", "--takeaway", "one")
+        self._run("--persona", "boss-kim", "--theme", "boss/micromanaging", "--takeaway", "two")
+        entries = st.load_log(self.dd)["entries"]
+        self.assertEqual([e["takeaway"] for e in entries], ["one", "two"])
 
 
 if __name__ == "__main__":
