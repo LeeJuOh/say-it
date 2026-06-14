@@ -1,5 +1,44 @@
-Status: ready-for-agent
+Status: done
 Blocked by: 03-s1-vent
+
+> **Closed** in commit `281b554`. The `/say-it` SKILL.md now runs the full 4-stage
+> arc end to end: S3 (integration) and S4 (closure, 4 bits + closing line) modules
+> join the existing S1/S2. Prompt-layer slice — no new runtime Python; the seams
+> (`save_takeaway.py`, `session_end.py`, `transition_stage.sh`, `load_log`) all
+> pre-existed. All 9 acceptance items met; 58 tests green (+4 new), source
+> Hangul-free.
+>
+> What landed:
+> - **S3 module** — back-in-your-own-chair turn (rumination → problem-solving,
+>   RF-CBT); the single load-bearing question "what did you actually want from
+>   them?"; deliverable is *one named want*; guardrails against re-venting and
+>   against turning S3 into advice-giving. Reached via `transition_stage.sh
+>   integration`.
+> - **S4 module** — the four bits: (1) bot drafts the takeaway from the S3 want,
+>   (2) user re-articulates in their own words (a bare "yeah" doesn't set it),
+>   (3) fiction reminder / cognitive defusion, (4) **exact-string** label dedup
+>   against `load_log` then `save_takeaway.py` with the **raw** takeaway, (5) the
+>   warm-but-plain closing line. Then `session_end.py` force-closes.
+> - **Closing-line tone** spelled out with both failure modes named (clinical
+>   "saved. done." ❌ / heavy therapy-speak ❌) and the knot-not-the-person
+>   distinction (`set this knot down` ⭕ / `said goodbye to them` ❌).
+> - **Lifecycle markers refreshed** — the intro, step 2 (entry gate), step 4, and
+>   step 5 no longer describe S3/S4 as future work.
+>
+> Two notes for the record:
+>
+> 1. **This slice activates issue 03's entry revisit gate.** That gate (step 2) was
+>    a documented permanent no-op because nothing wrote theme labels. S4 bit 4 now
+>    saves `(persona, theme_label, raw takeaway)` at closure, so on a return visit
+>    the log has prior issues for the gate's semantic match to mirror back. Entry
+>    gate = model semantic judgment; S4 exit dedup = exact-string `find_revisit`
+>    territory — kept distinct, the issue-03 trap not repeated.
+> 2. **CLI test added (acceptance §"save_takeaway 유닛테스트").** The library append
+>    was already covered by `TestTakeawayLog`; the closure path actually invoked is
+>    the `save_takeaway.py` **CLI**, which was untested. `TestSaveTakeawayCLI` drives
+>    it end-to-end on a tmp `SAY_IT_DATA_DIR`: append correctness, raw non-ASCII
+>    preservation, JSON integrity, and append-only across separate process
+>    invocations. No new production Python (Decisions §1).
 
 # integration 통합 + closure 마무리 (takeaway + 라벨 저장)
 
