@@ -1,5 +1,27 @@
-Status: ready-for-agent
-Blocked by: 01-hook-infra, 02-persona-builder
+Status: done
+Blocked by: None
+
+> **Closed** in commit `3521d89`. The `/say-it` SKILL.md is now the live runner
+> through S2: entry persona selection (0/1/2+ via `list_personas`), the entry
+> revisit check, the S1 vent renderer, and the S2 role-swap module. Prompt-only
+> slice — no new Python; all 34 tests stay green and source is Hangul-free.
+>
+> Three notes for the record:
+>
+> 1. **Revisit-check correction.** The draft lifecycle had wired the entry gate to
+>    the exact-string `find_revisit` helper. That helper is the *S4 exit* dedup
+>    tool (issue 06); the entry gate is **model semantic judgment** over the
+>    takeaway_log theme labels, no-op on an empty log (Decisions §1, CONTEXT.md
+>    "compare at the door, save on the way out"). Fixed here.
+> 2. **Issue 05 merge.** `05-s2-role-swap` is `merged → 03`, so this issue owns the
+>    complete S2 *prompt* module, not just "entry scaffolding." The handoff's
+>    Decision §4 ("full S2 = issue 05") predates the merge; the four S2 acceptance
+>    criteria (invitation, user-voices-the-other, bot-doesn't-advocate, graceful
+>    resist) are all met here. The sustained turn-by-turn S2 *cycling* still rides
+>    on the stage machinery in issue 04 (`transition_stage.sh`) and S3/S4 in 06.
+> 3. **BLOCKED branch = documented no-op.** The persona schema has no `blocked`
+>    flag yet (persona correction is issue 08), so the SKILL.md leaves the branch
+>    as a seam rather than introducing a schema field. Decided with the user.
 
 # S1 분출 + S2 역할교대 (봇 렌더러 + 재방문 가드 입구 + 역할교대 스캐폴딩)
 
