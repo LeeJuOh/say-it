@@ -1,5 +1,19 @@
-Status: ready-for-agent
+Status: done
 Blocked by: None
+
+> **Closed** in commit `62c639c`. New `/say-it-build` skill (5-layer intake
+> flow), `save_persona`/`load_persona`/`list_personas` helpers in
+> `sayit_state.py`, `save_persona.py` CLI (validate-at-boundary write path), and
+> 6 new unit tests (34 total, green). Acceptance list fully met.
+>
+> One intentional deviation: the conflict-vocabulary table was **moved** from
+> `skills/say-it/references/` (where issue 01 first placed it) to
+> `skills/say-it-build/references/` — the builder is its only consumer, the
+> runner never reads it, and issue 02 calls for it bundled in the *build* skill's
+> `references/`. Single source, no duplication; the file's `../../../` relative
+> links survive because the directory depth is identical. The shared
+> `persona.schema.json` stays under `skills/say-it/references/schemas/` (the
+> runner reads it too); the build skill references it cross-skill.
 
 # 페르소나 빌더
 
@@ -33,15 +47,15 @@ Layer 4가 yourself의 "인간관계"를 **관계 맥락**으로 교체한 say-i
 
 ## Acceptance criteria
 
-- [ ] Intake flow가 5층 각각에 대한 질문 진행
-- [ ] intake에 **"그 사람이 죽어도 안 할 말/행동은?"**(부정 공간) 질문 → Layer 0에 박음 (ref: nuwa 禁忌词). 봇이 갑자기 착해져 가짜 사과/위로하는 것 차단 = 몰입+안전. 유저가 막막해하면 서술서 역추론으로 fallback
-- [ ] 관계 맥락(갈등역학·전형싸움·"내가 원하는 것") Layer 4로 저장
-- [ ] 빈 칸은 LLM 추론으로 채움 — **유저 서술 결 따라 외삽, 스테레오타입(직군/별자리/MBTI) 금지**
-- [ ] Layer 4에 **양가성/핵심 긴장** 필드 — 그 사람 행동의 모순 보존(매끄럽게 지우지 않음)
-- [ ] intake가 **갈등 단어표**(conflict-vocabulary.md) 참조해 막연한 라벨→구체 행동 번역
-- [ ] 프리뷰서 어느 층이 서술 vs 추론인지 표시 (유저가 추론분 교정 가능)
-- [ ] "내 인식 속 그 사람, 진짜 아님" 안내 표시
-- [ ] 유저가 페르소나 요약 미리보기 후 확정 가능
-- [ ] 페르소나 파일이 이슈 01의 JSON 스키마(5층 + corrections)대로 생성
-- [ ] 저장 경로: `$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json` (id = 관계+이름 slug, 예: `boss-kim`)
-- [ ] 멀티 페르소나: personas/ 디렉토리 내 파일 여러 개로 관리
+- [x] Intake flow가 5층 각각에 대한 질문 진행
+- [x] intake에 **"그 사람이 죽어도 안 할 말/행동은?"**(부정 공간) 질문 → Layer 0에 박음 (ref: nuwa 禁忌词). 봇이 갑자기 착해져 가짜 사과/위로하는 것 차단 = 몰입+안전. 유저가 막막해하면 서술서 역추론으로 fallback
+- [x] 관계 맥락(갈등역학·전형싸움·"내가 원하는 것") Layer 4로 저장
+- [x] 빈 칸은 LLM 추론으로 채움 — **유저 서술 결 따라 외삽, 스테레오타입(직군/별자리/MBTI) 금지**
+- [x] Layer 4에 **양가성/핵심 긴장** 필드 — 그 사람 행동의 모순 보존(매끄럽게 지우지 않음)
+- [x] intake가 **갈등 단어표**(conflict-vocabulary.md) 참조해 막연한 라벨→구체 행동 번역
+- [x] 프리뷰서 어느 층이 서술 vs 추론인지 표시 (유저가 추론분 교정 가능)
+- [x] "내 인식 속 그 사람, 진짜 아님" 안내 표시
+- [x] 유저가 페르소나 요약 미리보기 후 확정 가능
+- [x] 페르소나 파일이 이슈 01의 JSON 스키마(5층 + corrections)대로 생성
+- [x] 저장 경로: `$CLAUDE_PLUGIN_DATA_DIR/personas/{id}.json` (id = 관계+이름 slug, 예: `boss-kim`)
+- [x] 멀티 페르소나: personas/ 디렉토리 내 파일 여러 개로 관리
