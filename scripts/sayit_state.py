@@ -201,20 +201,88 @@ def check_distress(prompt: str) -> dict:
 
 def evaluate_guards(state: dict, prompt: str) -> dict:
     """Recompute the per-turn guard block from the current turn count and prompt.
-    Pure function of (state, prompt): returns a fresh guards dict, mutates nothing."""
+    Pure function of (state, prompt): returns a fresh guards dict, mutates nothing.
+
+    The turn cap is **vent-only** (issue 04 / ADR rationale): vent is the open
+    pour-it-out stage where rumination can run away, so it is the one stage with a
+    budget. role-swap / integration / closure are already structured and bounded by
+    their own facilitation, so the cap would only get in their way — hence the
+    `in_vent` gate that holds soft_hit/hard_hit False outside vent no matter how
+    high `turn` has climbed (the counter stays monotonic across stages; only its
+    *meaning* is vent-scoped)."""
     cap = state.get("guards", {}).get("turn_cap", {})
     soft = cap.get("soft", DEFAULT_SOFT_CAP)
     hard = cap.get("hard", DEFAULT_HARD_CAP)
     turn = state.get("turn", 0)
+    in_vent = state.get("stage") == "vent"
     return {
         "distress": check_distress(prompt),
         "turn_cap": {
             "soft": soft,
             "hard": hard,
-            "soft_hit": turn >= soft,
-            "hard_hit": turn >= hard,
+            "soft_hit": in_vent and turn >= soft,
+            "hard_hit": in_vent and turn >= hard,
         },
     }
+
+
+def advance_stage(dd: Path, next_stage: str) -> dict:
+    """Forward-only stage transition (issue 04). Loads the active session, verifies
+    that ``next_stage`` is the *immediate* successor of the current stage, writes
+    it, and returns the updated state.
+
+    Forward-only is the whole point: the empty-chair arc only moves one direction
+    (vent -> role-swap -> integration -> closure). Going back to a finished stage or
+    skipping one would desync the hook's stage-gated logic (e.g. re-entering vent
+    would re-arm the turn cap) and break the ritual's shape. So this rejects
+    backward moves, skips, unknown names, and advancing past closure — raising
+    ``ValueError`` with a message the thin CLI surfaces, so the model can read why
+    and retry rather than silently landing in a wrong stage."""
+    if next_stage not in STAGES:
+        raise ValueError(
+            f"unknown stage {next_stage!r}; must be one of {', '.join(STAGES)}")
+    state = load_session(dd)
+    if state is None:
+        raise ValueError("no active session to advance (session_state.json absent)")
+    current = state.get("stage")
+    try:
+        cur_i = STAGES.index(current)
+    except ValueError:
+        raise ValueError(f"current stage {current!r} is not a known stage")
+    expected = STAGES[cur_i + 1] if cur_i + 1 < len(STAGES) else None
+    if next_stage != expected:
+        if expected is None:
+            raise ValueError(
+                f"already at the final stage {current!r}; nothing to advance to")
+        raise ValueError(
+            f"forward-only: from {current!r} the only valid next stage is "
+            f"{expected!r}, not {next_stage!r}")
+    state["stage"] = next_stage
+    save_session(dd, state)
+    return state
+
+
+def use_extension(dd: Path) -> dict:
+    """Spend the one-time vent extension — the user's "give me a bit more room"
+    past the soft cap (issue 04). Loads the active session, flips the
+    ``extension_used`` latch, persists, returns the updated state.
+
+    The latch is what makes "exactly once per session" enforceable in *code* rather
+    than relying on the model to remember: a second call raises, so the +3 room
+    between the soft cap (8) and the hard ceiling (11) can be granted at most once.
+    Vent-only, because that is the only stage the cap applies to — calling it
+    elsewhere is a logic error worth surfacing, not a silent no-op."""
+    state = load_session(dd)
+    if state is None:
+        raise ValueError("no active session to extend (session_state.json absent)")
+    if state.get("stage") != "vent":
+        raise ValueError(
+            f"the extension only applies in vent (current stage is {state.get('stage')!r})")
+    if state.get("extension_used"):
+        raise ValueError("extension already used (one per session)")
+    state["extension_used"] = True
+    save_session(dd, state)
+    return state
 
 
 def tick(state: dict, prompt: str = "") -> dict:
@@ -238,11 +306,26 @@ def render_reminder(state: dict) -> str:
     distress = g.get("distress", {})
     soft, hard = cap.get("soft"), cap.get("hard")
     turn = state.get("turn", 0)
+    extension_used = state.get("extension_used", False)
 
+    # cap_marker is the machine-readable token the model branches on; cap_line is
+    # the human-readable status. Both are already vent-only because soft_hit /
+    # hard_hit are gated on stage in evaluate_guards — outside vent they are False,
+    # so this lands in the "not reached" branch and emits no marker. The SOFT
+    # marker is suppressed once the extension is spent: the user already chose
+    # "more room," so re-firing the invite every turn would nag, exactly the
+    # re-suppression the cap copy is written to avoid (invitation, not exile). HARD
+    # still fires through a spent extension — the ceiling is non-negotiable.
+    cap_marker = None
     if cap.get("hard_hit"):
         cap_line = f"turn-cap: {turn}/{soft} soft, HARD CEILING {hard} REACHED"
-    elif cap.get("soft_hit"):
+        cap_marker = "CAP_TRIGGERED: HARD"
+    elif cap.get("soft_hit") and not extension_used:
         cap_line = f"turn-cap: SOFT CAP {soft} REACHED (turn {turn}, hard ceiling {hard})"
+        cap_marker = "CAP_TRIGGERED: SOFT"
+    elif cap.get("soft_hit"):  # soft passed but extension already spent
+        cap_line = (f"turn-cap: soft {soft} passed, extension spent, "
+                    f"running to hard ceiling {hard} (turn {turn})")
     else:
         cap_line = f"turn-cap: turn {turn} (soft {soft}, hard {hard}) — not reached"
 
@@ -254,8 +337,12 @@ def render_reminder(state: dict) -> str:
     lines = [
         "[say-it session — authoritative state, refreshed this turn by the hook]",
         f"persona: {state.get('persona_id')} | stage: {state.get('stage')} | turn: {turn}",
-        f"theme: {state.get('theme_label')} | extension used: {state.get('extension_used')}",
+        f"theme: {state.get('theme_label')} | extension used: {extension_used}",
         cap_line,
+    ]
+    if cap_marker:
+        lines.append(cap_marker)
+    lines += [
         distress_line,
         "This block is machine-owned and overrides any stage or count you infer "
         "from the conversation. Honor `stage` and the cap policy. If the distress "

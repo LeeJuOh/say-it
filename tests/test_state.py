@@ -277,6 +277,179 @@ class TestRenderReminder(StateTestCase):
         self.assertIn("HARD CEILING", st.render_reminder(state))
 
 
+class TestAdvanceStage(StateTestCase):
+    """Forward-only stage motor (issue 04). The arc moves one direction only, so
+    these lock down: each immediate forward step succeeds, and every other move
+    (backward, skip, unknown, past-final, no-session) is refused with a message."""
+
+    def test_forward_one_step_succeeds_through_whole_arc(self):
+        st.start_session(self.dd, persona_id="boss-kim")  # enters at vent
+        self.assertEqual(st.advance_stage(self.dd, "role-swap")["stage"], "role-swap")
+        self.assertEqual(st.advance_stage(self.dd, "integration")["stage"], "integration")
+        self.assertEqual(st.advance_stage(self.dd, "closure")["stage"], "closure")
+        # And it persisted, not just returned.
+        self.assertEqual(st.load_session(self.dd)["stage"], "closure")
+
+    def test_backward_move_is_rejected(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        st.advance_stage(self.dd, "role-swap")
+        with self.assertRaises(ValueError) as ctx:
+            st.advance_stage(self.dd, "vent")
+        self.assertIn("forward-only", str(ctx.exception))
+        self.assertEqual(st.load_session(self.dd)["stage"], "role-swap")  # unchanged
+
+    def test_skip_is_rejected(self):
+        # vent -> integration jumps over role-swap; refused.
+        st.start_session(self.dd, persona_id="boss-kim")
+        with self.assertRaises(ValueError):
+            st.advance_stage(self.dd, "integration")
+        self.assertEqual(st.load_session(self.dd)["stage"], "vent")
+
+    def test_unknown_stage_name_is_rejected(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        with self.assertRaises(ValueError) as ctx:
+            st.advance_stage(self.dd, "venting")
+        self.assertIn("unknown stage", str(ctx.exception))
+
+    def test_same_stage_is_rejected(self):
+        # vent -> vent is not "forward"; the only valid next is role-swap.
+        st.start_session(self.dd, persona_id="boss-kim")
+        with self.assertRaises(ValueError):
+            st.advance_stage(self.dd, "vent")
+
+    def test_cannot_advance_past_final_stage(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        for s in ("role-swap", "integration", "closure"):
+            st.advance_stage(self.dd, s)
+        with self.assertRaises(ValueError) as ctx:
+            st.advance_stage(self.dd, "closure")
+        self.assertIn("final stage", str(ctx.exception))
+
+    def test_no_session_is_rejected(self):
+        with self.assertRaises(ValueError):
+            st.advance_stage(self.dd, "role-swap")
+
+
+class TestVentExtension(StateTestCase):
+    """The one-time +3 vent extension. The latch enforces "exactly once" in code,
+    and the extension only makes sense in vent (the only capped stage)."""
+
+    def test_first_extension_sets_latch(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        state = st.use_extension(self.dd)
+        self.assertTrue(state["extension_used"])
+        self.assertTrue(st.load_session(self.dd)["extension_used"])  # persisted
+
+    def test_second_extension_is_rejected(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        st.use_extension(self.dd)
+        with self.assertRaises(ValueError) as ctx:
+            st.use_extension(self.dd)
+        self.assertIn("already used", str(ctx.exception))
+
+    def test_extension_only_in_vent(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        st.advance_stage(self.dd, "role-swap")
+        with self.assertRaises(ValueError) as ctx:
+            st.use_extension(self.dd)
+        self.assertIn("vent", str(ctx.exception))
+
+    def test_no_session_is_rejected(self):
+        with self.assertRaises(ValueError):
+            st.use_extension(self.dd)
+
+
+class TestCapStageGating(StateTestCase):
+    """The cap counts ONLY in vent. Past the swap the same turn count must not
+    trip soft/hard — role-swap/integration/closure are structured, not capped."""
+
+    def test_cap_does_not_trip_outside_vent(self):
+        state = st.new_session()
+        state["stage"] = "role-swap"
+        state["turn"] = 20  # way past both caps
+        guards = st.evaluate_guards(state, "")
+        self.assertFalse(guards["turn_cap"]["soft_hit"])
+        self.assertFalse(guards["turn_cap"]["hard_hit"])
+
+    def test_cap_trips_in_vent(self):
+        state = st.new_session()  # stage vent
+        state["turn"] = 8
+        self.assertTrue(st.evaluate_guards(state, "")["turn_cap"]["soft_hit"])
+
+
+class TestCapMarkers(StateTestCase):
+    """The hook->model branch tokens. SOFT invites; HARD forces; a spent extension
+    silences SOFT (no nagging) but never silences HARD (the ceiling is firm)."""
+
+    def _reminder_at(self, turn, extension_used=False, stage="vent"):
+        state = st.new_session()
+        state["stage"] = stage
+        state["turn"] = turn
+        state["extension_used"] = extension_used
+        state["guards"] = st.evaluate_guards(state, "")
+        return st.render_reminder(state)
+
+    def test_soft_marker_at_soft_cap(self):
+        text = self._reminder_at(8)
+        self.assertIn("CAP_TRIGGERED: SOFT", text)
+        self.assertNotIn("CAP_TRIGGERED: HARD", text)
+
+    def test_hard_marker_at_hard_ceiling(self):
+        text = self._reminder_at(11)
+        self.assertIn("CAP_TRIGGERED: HARD", text)
+
+    def test_spent_extension_silences_soft_marker(self):
+        # Turn 9, extension already used: still past soft, but no re-invite.
+        text = self._reminder_at(9, extension_used=True)
+        self.assertNotIn("CAP_TRIGGERED: SOFT", text)
+        self.assertIn("extension spent", text)
+
+    def test_spent_extension_still_emits_hard(self):
+        text = self._reminder_at(11, extension_used=True)
+        self.assertIn("CAP_TRIGGERED: HARD", text)
+
+    def test_no_marker_before_soft_cap(self):
+        self.assertNotIn("CAP_TRIGGERED", self._reminder_at(7))
+
+    def test_no_marker_outside_vent(self):
+        # role-swap at turn 20: gated off, so no marker even far past the numbers.
+        self.assertNotIn("CAP_TRIGGERED", self._reminder_at(20, stage="role-swap"))
+
+
+class TestCapFullFlow(StateTestCase):
+    """End-to-end of the acceptance scenario: 8-turn soft invite, exactly one
+    extension, 11-turn hard force — driven through the real helpers on disk."""
+
+    def _tick_to(self, target_turn):
+        """Tick a fresh active vent session up to ``target_turn`` and return the
+        reminder text the model would see on that turn."""
+        st.start_session(self.dd, persona_id="boss-kim")
+        state = st.load_session(self.dd)
+        text = ""
+        for _ in range(target_turn):
+            st.tick(state, "still venting")
+            st.save_session(self.dd, state)
+            text = st.render_reminder(state)
+        return state, text
+
+    def test_soft_then_extend_then_hard(self):
+        state, text = self._tick_to(8)
+        self.assertIn("CAP_TRIGGERED: SOFT", text)        # 8 -> invite
+
+        st.use_extension(self.dd)                          # user wants more, once
+        with self.assertRaises(ValueError):
+            st.use_extension(self.dd)                       # never twice
+
+        # Re-tick from the persisted (now extended) state up to the ceiling.
+        state = st.load_session(self.dd)
+        text = ""
+        while state["turn"] < 11:
+            st.tick(state, "more")
+            st.save_session(self.dd, state)
+            text = st.render_reminder(state)
+        self.assertIn("CAP_TRIGGERED: HARD", text)         # 11 -> force close
+
+
 class TestDataDirResolution(unittest.TestCase):
     """Precedence: explicit arg > SAY_IT_DATA_DIR > CLAUDE_PLUGIN_DATA; None when
     nothing is set so the hot path can bail instead of guessing a location."""

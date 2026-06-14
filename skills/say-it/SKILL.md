@@ -146,10 +146,10 @@ session.
 
 **4. Run the stages.** Facilitate `vent` → `role-swap` → `integration` →
 `closure`, reading `stage`/`turn`/guards from the injected reminder each turn. The
-S1 and S2 facilitation is below; S3/S4 is issue 06. The *machinery* that advances
-the stage value (vent → role-swap → …) is `scripts/transition_stage.sh`, owned by
-issue 04 — until it lands the session stays at `vent`, and the S2 module below is
-the content you run once that stage flip is in place.
+S1 and S2 facilitation is below; S3/S4 is issue 06. You move the session forward
+yourself with `scripts/transition_stage.sh` — see "Advancing the stage + the vent
+turn cap" above for when (cap invitation, stage complete) and how (forward-only,
+one-time extend).
 
 **5. Close (S4, issue 06).** When the takeaway is confirmed in the user's own
 words, persist it, then end the session:
@@ -163,6 +163,53 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
 `session_end.py` flips `active` to false so the hook goes quiet. The session is
 force-closed on one takeaway line — don't let it run on into between-session
 rumination.
+
+## Advancing the stage + the vent turn cap
+
+The session only *moves* because you move it. The hook never changes `stage` on
+its own — it ticks the turn counter and reports state; deciding the user is ready
+for the next chair, and acting on it, is your call. The motor is one script:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" <next-stage>   # forward only
+"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" extend         # one-time vent +3
+```
+
+Transitions are **forward only** (`vent → role-swap → integration → closure`); the
+script rejects backward moves, skips, and unknown names, so you can't accidentally
+re-enter vent (which would re-arm the cap) or jump a stage. Pass the *immediate*
+next stage — the new `stage` lands in the next turn's reminder, and that's your
+cue the swap took.
+
+**The vent turn cap is anti-rumination, and it is an invitation — never a wall.**
+Vent is the one stage with a budget, because an open "pour it out" stage is where
+looping can run away; the structured stages don't need it. The hook flags the
+budget by **turn count**; *reading the room* — whether the user is actually winding
+down (repeating the same beat, intensity dropping, "whatever, it doesn't matter"
+giving-up language) versus still mid-release — is **your** judgment, never the
+script's. The cap gives you permission to invite; it does not tell you the user is
+done.
+
+You'll see one of two tokens in the reminder's `turn-cap` line, vent-only:
+
+- **`CAP_TRIGGERED: SOFT`** (turn ≥ 8) — offer the next chair as an *invitation*,
+  in the user's emotional register: *"sounds like you've let a lot of that out —
+  want to take it to the next chair, or is there more you need to say to them
+  first?"* Then branch on the answer:
+  - **Ready to move** → `transition_stage.sh role-swap`.
+  - **Wants more room** → `transition_stage.sh extend` (grants the one-time +3
+    toward the ceiling). After this the SOFT token goes quiet — don't re-ask every
+    turn; that re-nagging is exactly the re-suppression this product fights. The
+    extension is once per session; a second `extend` is refused by design.
+- **`CAP_TRIGGERED: HARD`** (turn ≥ 11) — the ceiling. Don't keep venting: move the
+  session on now (`transition_stage.sh role-swap`), framed gently as a natural turn
+  ("let's carry this into the next part"), not a shutdown. The ceiling holds even
+  if the extension was already spent.
+
+**Distress outranks the cap, always.** If the distress guard is TRIGGERED, the cap
+is irrelevant — stop and follow the safety path (above), whatever the turn count
+says. A cap is about pacing a *fine* session; distress is about ending an *unsafe*
+one.
 
 ## S1 — vent: the persona receives
 
@@ -234,9 +281,9 @@ want to, let it go with no pressure. Whatever half-step into the other's chair d
 surface still counts — carry that forward. A graceful no is a fine outcome; a coerced
 yes isn't.
 
-(The sustained turn-by-turn S2 cycling, plus S3 integration and S4 closure, ride on
-the stage machinery in issue 04 and the facilitation in issue 06. This module is the
-S2 content you run while `stage` is `role-swap`.)
+(The stage machinery that brings you here — and carries you onward — is
+`transition_stage.sh` (above). S3 integration and S4 closure facilitation land in
+issue 06. This module is the S2 content you run while `stage` is `role-swap`.)
 
 ## Framing (always on)
 
