@@ -209,6 +209,54 @@ class TestPersonaValidation(StateTestCase):
         self.assertTrue(st.validate_persona("not a dict"))
 
 
+class TestPersonaIO(StateTestCase):
+    """save/load/list are the single on-disk path for personas (issue 02). The
+    write must validate at the boundary so a broken persona never reaches the
+    runner, and the round-trip must preserve the user's narration verbatim."""
+
+    def test_save_persona_round_trips(self):
+        p = st.persona_template("boss-kim")
+        path = st.save_persona(self.dd, p)
+        self.assertTrue(path.exists())
+        self.assertEqual(path, self.dd / "personas" / "boss-kim.json")
+        self.assertEqual(st.load_persona(self.dd, "boss-kim"), p)
+
+    def test_save_persona_preserves_non_ascii_narration(self):
+        # Narration is runtime data in the user's own language, stored as-is
+        # (ensure_ascii=False). It must round-trip raw UTF-8, not \uXXXX escapes.
+        # We assert this with a language-neutral accented string so the test
+        # source itself stays ASCII (the plugin's English-source rule).
+        name = "Señor Café"  # "Señor Café" — non-ASCII, no hardcoded locale
+        p = st.persona_template("boss-kim")
+        p["display_name"] = name
+        path = st.save_persona(self.dd, p)
+        self.assertIn(name, path.read_text(encoding="utf-8"))  # raw, not escaped
+        self.assertEqual(st.load_persona(self.dd, "boss-kim")["display_name"], name)
+
+    def test_save_persona_rejects_invalid(self):
+        p = st.persona_template("boss-kim")
+        del p["layers"]["L4_relationship_dynamics"]["ambivalence"]
+        with self.assertRaises(ValueError) as ctx:
+            st.save_persona(self.dd, p)
+        self.assertIn("ambivalence", str(ctx.exception))
+        # Rejected before any file is written — nothing lands on disk.
+        self.assertEqual(st.list_personas(self.dd), [])
+
+    def test_load_persona_none_when_absent(self):
+        self.assertIsNone(st.load_persona(self.dd, "nobody"))
+
+    def test_list_personas_empty_when_no_dir(self):
+        self.assertEqual(st.list_personas(self.dd), [])
+
+    def test_list_personas_sorted(self):
+        # Multi-persona = several files in one dir; list them for collision
+        # checks and runner selection.
+        st.save_persona(self.dd, st.persona_template("boss-kim"))
+        st.save_persona(self.dd, st.persona_template("mom"))
+        st.save_persona(self.dd, st.persona_template("ex-jun"))
+        self.assertEqual(st.list_personas(self.dd), ["boss-kim", "ex-jun", "mom"])
+
+
 class TestRenderReminder(StateTestCase):
     """The hook->model contract. It must surface the fields the model reads
     instead of re-deriving from the conversation (the context-rot failure)."""

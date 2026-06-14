@@ -360,6 +360,45 @@ def validate_persona(obj) -> list[str]:
     return errors
 
 
+def save_persona(dd: Path, persona: dict) -> Path:
+    """Validate then atomically write a persona to ``personas/<id>.json``.
+
+    This is the single on-disk write path for the build skill (issue 02): the
+    skill constructs the persona dict, this is the only thing that puts it on
+    disk, so ``validate_persona`` runs exactly once at the boundary and a
+    structurally-broken persona can never reach the session runner. Raises
+    ``ValueError`` carrying the structural errors so the caller (the
+    save_persona CLI) can surface them and the model can fix and retry rather
+    than silently shipping a bad file.
+    """
+    errors = validate_persona(persona)
+    if errors:
+        raise ValueError("invalid persona: " + "; ".join(errors))
+    path = _persona_path(dd, persona["id"])
+    _write_json_atomic(path, persona)
+    return path
+
+
+def load_persona(dd: Path, persona_id: str) -> dict | None:
+    """Return the persona dict for ``persona_id``, or None if there is no file.
+    The session runner (issue 03) reads the persona to drive the session; the
+    build skill uses it to show a just-saved persona back to the user."""
+    return _read_json(_persona_path(dd, persona_id), None)
+
+
+def list_personas(dd: Path) -> list[str]:
+    """List existing persona ids (filename stems) under ``personas/``, sorted.
+
+    Multi-persona lives as multiple files in one directory, so this is how the
+    build skill spots an id collision before overwriting and how the runner
+    offers the user a choice of who to sit across from. Empty list when the
+    directory does not exist yet."""
+    pdir = Path(dd) / "personas"
+    if not pdir.is_dir():
+        return []
+    return sorted(p.stem for p in pdir.glob("*.json"))
+
+
 def persona_template(persona_id: str = "boss-kim") -> dict:
     """A minimal valid persona, for tests and as a concrete reference for issue 02.
 
