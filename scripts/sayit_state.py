@@ -559,8 +559,24 @@ def validate_persona(obj) -> list[str]:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
     if not isinstance(obj.get("id"), str) or not obj.get("id"):
         errors.append("id must be a non-empty string")
-    if not isinstance(obj.get("corrections"), list):
+    corrections = obj.get("corrections")
+    if not isinstance(corrections, list):
         errors.append("corrections must be an array (may be empty)")
+    else:
+        # corrections is the single write path for issue 08; check each item's
+        # shape here, at the same boundary save_persona guards, so a malformed
+        # correction can never land on disk. Mirrors persona.schema.json's
+        # items.required: ["at", "layer", "note"].
+        for i, c in enumerate(corrections):
+            if not isinstance(c, dict):
+                errors.append(f"corrections[{i}] must be an object")
+                continue
+            if c.get("layer") not in _PERSONA_LAYERS:
+                errors.append(f"corrections[{i}].layer must be one of L0..L4")
+            if not isinstance(c.get("note"), str) or not c.get("note"):
+                errors.append(f"corrections[{i}].note is required (what the user says is wrong)")
+            if not isinstance(c.get("at"), str) or not c.get("at"):
+                errors.append(f"corrections[{i}].at timestamp is required")
 
     layers = obj.get("layers")
     if not isinstance(layers, dict):
@@ -611,6 +627,34 @@ def load_persona(dd: Path, persona_id: str) -> dict | None:
     The session runner (issue 03) reads the persona to drive the session; the
     build skill uses it to show a just-saved persona back to the user."""
     return _read_json(_persona_path(dd, persona_id), None)
+
+
+def append_correction(dd: Path, persona_id: str, layer: str, note: str,
+                      before: str | None = None, after: str | None = None) -> dict:
+    """Append one user correction to a persona and persist it (issue 08).
+
+    The trigger is the user saying "the real person isn't like that" during or
+    after a session. Layering is *non-destructive*: the built L0..L4 layers are
+    never read-modified-rewritten here — only the append-only ``corrections``
+    array grows, each entry carrying its own trace (``at``/``layer``/``note`` plus
+    optional before->after) so the drift from the built persona toward the user's
+    perception stays auditable. The note is the user's runtime data, stored RAW.
+
+    The write goes through ``save_persona`` so the same boundary validation that
+    guards the build rejects a malformed correction (bad layer, empty note) before
+    it lands. Raises ``ValueError`` if ``persona_id`` has no file to correct.
+    """
+    persona = load_persona(dd, persona_id)
+    if persona is None:
+        raise ValueError(f"no persona {persona_id!r} to correct")
+    entry = {"at": _now(), "layer": layer, "note": note}
+    if before is not None:
+        entry["from"] = before
+    if after is not None:
+        entry["to"] = after
+    persona.setdefault("corrections", []).append(entry)
+    save_persona(dd, persona)
+    return persona
 
 
 def list_personas(dd: Path) -> list[str]:

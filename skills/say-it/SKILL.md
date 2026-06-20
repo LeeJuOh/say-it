@@ -120,9 +120,10 @@ Each line is a persona `id`. Branch on the count:
   `display_name` (read each file for a human label, not the slug). Let the user
   pick one; that `id` is what every later step uses.
 - **blocked** — a persona flagged unsafe to re-run would surface a brief
-  "this one's on hold" notice instead of starting. There is no `blocked` flag in
-  the persona schema yet (persona correction owns that — issue 08), so this branch
-  is a documented no-op for now: don't invent the flag here, just leave the seam.
+  "this one's on hold" notice instead of starting. There is no persona-level
+  `blocked` flag in the schema (session-level blocking lives in `session_state`,
+  issue 07; issue 08 added corrections, not a persona hold), so this branch is a
+  documented no-op for now: don't invent the flag here, just leave the seam.
 
 **2. Entry revisit check (semantic; a no-op on the first session, live once
 closures exist).** Before vent, catch the case where the user is back on a knot they already worked —
@@ -422,6 +423,49 @@ python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
 `session_end.py` flips `active` to false so the hook goes quiet. Don't keep the
 conversation going past this — the force-close *is* the anti-rumination guard at the
 exit, the bookend to the entry gate. The knot is down; the round is over.
+
+## Persona correction — "the real person isn't like that" (issue 08)
+
+The whole product rests on "the person *as the user perceives them*." So when the
+user pushes back that the persona rang false — *"he'd never say that," "she's much
+softer in real life," "my mom doesn't guilt-trip, she goes silent"* — that is not
+an interruption to manage, it's the most valuable signal you get: the gap between
+the built persona and the user's real read. Capture it, and the persona drifts
+toward their perception over time instead of staying frozen at build-time guesses.
+
+**This is additive, never a rewrite.** Don't reopen `/say-it-build` and don't edit
+the L0..L4 layers. Corrections stack as their own append-only layer on top, each
+one keeping a trace of what changed and when, so the persona's evolution stays
+visible. One call does it:
+
+```bash
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_correction.py" \
+  --persona <id> --layer <L0_hard_rules|L1_identity|L2_voice|L3_emotional_triggers|L4_relationship_dynamics> \
+  --note "<the user's correction, in their own words, raw>" \
+  [--before "<how the persona behaved>"] [--after "<how it should be>"]
+```
+
+- **Pick the layer the dispute targets.** Who they are → `L1_identity`; how they
+  talk → `L2_voice`; what sets them off → `L3_emotional_triggers`; the pull between
+  you → `L4_relationship_dynamics`; a never-do line → `L0_hard_rules`. If unsure,
+  ask one clarifying question rather than guessing the wrong layer.
+- **`--note` is the user's words, raw** — don't summarize or clean it up, same as a
+  takeaway. `--before`/`--after` are optional but worth capturing when the user
+  draws a clear contrast ("not 'you failed me' — more like a quiet sigh").
+
+**Mid-session vs. after.** Either works — the script is stage-independent.
+- *Mid-session*: acknowledge, save the correction, and steer the *current* persona
+  voicing to match right away — but don't derail the round into a rebuild. A quick
+  "got it — he's gentler than I played him; let me bring him back truer" then carry
+  on the empty-chair work.
+- *After closure*: a light capture. "noticed she felt off earlier — want me to fix
+  how I read her for next time?" then log it.
+
+**The payoff is on the next load.** When you start a session (step 1) and read the
+persona, also read its `corrections` and let the later ones *override* the built
+layer in how you voice the persona — newest correction wins on conflict. That is
+how the accumulated corrections actually pull each session closer to the real
+person; a correction nobody applies is just a log entry.
 
 ## Framing (always on)
 

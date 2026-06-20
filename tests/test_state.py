@@ -363,6 +363,15 @@ class TestPersonaValidation(StateTestCase):
     def test_non_object_fails(self):
         self.assertTrue(st.validate_persona("not a dict"))
 
+    def test_malformed_correction_item_fails(self):
+        # corrections is the single write path for issue 08; the boundary check
+        # must reject an item missing its required note/layer, not just verify the
+        # outer array is a list.
+        p = st.persona_template()
+        p["corrections"] = [{"at": "2026-01-01T00:00:00+00:00", "layer": "L2_voice"}]
+        errors = st.validate_persona(p)
+        self.assertTrue(any("note" in e for e in errors))
+
 
 class TestPersonaIO(StateTestCase):
     """save/load/list are the single on-disk path for personas (issue 02). The
@@ -410,6 +419,84 @@ class TestPersonaIO(StateTestCase):
         st.save_persona(self.dd, st.persona_template("mom"))
         st.save_persona(self.dd, st.persona_template("ex-jun"))
         self.assertEqual(st.list_personas(self.dd), ["boss-kim", "ex-jun", "mom"])
+
+
+class TestPersonaCorrection(StateTestCase):
+    """Issue 08: 'the real person isn't like that'. A correction appends to the
+    persona's ``corrections`` log and is persisted, without ever touching the
+    built L0..L4 layers — non-destructive layering, so the drift from the built
+    persona toward the user's perception stays auditable across sessions."""
+
+    def _seed(self):
+        st.save_persona(self.dd, st.persona_template("boss-kim"))
+
+    def test_append_records_entry(self):
+        self._seed()
+        p = st.append_correction(self.dd, "boss-kim", "L2_voice",
+                                 "he is softer than this in person")
+        self.assertEqual(len(p["corrections"]), 1)
+        c = p["corrections"][0]
+        self.assertEqual(c["layer"], "L2_voice")
+        self.assertEqual(c["note"], "he is softer than this in person")
+        self.assertIn("at", c)  # provenance: when the correction came in
+
+    def test_corrections_accumulate(self):
+        # Append-only: a later correction stacks on the earlier one, in order.
+        self._seed()
+        st.append_correction(self.dd, "boss-kim", "L2_voice", "softer")
+        st.append_correction(self.dd, "boss-kim", "L3_emotional_triggers", "not money")
+        layers = [c["layer"] for c in st.load_persona(self.dd, "boss-kim")["corrections"]]
+        self.assertEqual(layers, ["L2_voice", "L3_emotional_triggers"])
+
+    def test_persists_across_reload(self):
+        # The whole point: corrections outlive the session that produced them.
+        self._seed()
+        st.append_correction(self.dd, "boss-kim", "L1_identity", "older than i said")
+        self.assertEqual(len(st.load_persona(self.dd, "boss-kim")["corrections"]), 1)
+
+    def test_original_layers_preserved(self):
+        # Non-destructive: the built L0..L4 layers are unchanged after a
+        # correction — it is a new layer on top, never an overwrite of the source.
+        self._seed()
+        before = st.load_persona(self.dd, "boss-kim")["layers"]
+        p = st.append_correction(self.dd, "boss-kim", "L2_voice", "softer")
+        self.assertEqual(p["layers"], before)
+
+    def test_before_after_optional_fields_stored(self):
+        # Optional from/to give the correction a visible before->after trace.
+        self._seed()
+        c = st.append_correction(self.dd, "boss-kim", "L2_voice", "softer",
+                                 before="barks orders",
+                                 after="asks, never demands")["corrections"][0]
+        self.assertEqual(c["from"], "barks orders")
+        self.assertEqual(c["to"], "asks, never demands")
+
+    def test_raw_non_ascii_note_round_trips(self):
+        # The note is the user's runtime data, stored as-is (ensure_ascii=False);
+        # asserted with a language-neutral accented string so the source stays
+        # ASCII (the plugin's English-source rule).
+        self._seed()
+        note = "el es mas amable"  # stand-in; real notes arrive in the user's language
+        accented = note.replace("el", "él").replace("mas", "más")
+        st.append_correction(self.dd, "boss-kim", "L2_voice", accented)
+        raw = (self.dd / "personas" / "boss-kim.json").read_text(encoding="utf-8")
+        self.assertIn(accented, raw)  # raw UTF-8, not \uXXXX escapes
+
+    def test_missing_persona_raises(self):
+        with self.assertRaises(ValueError):
+            st.append_correction(self.dd, "ghost", "L2_voice", "n")
+
+    def test_invalid_layer_rejected(self):
+        # Conforms to persona.schema.json's layer enum; a typo'd layer can't land.
+        self._seed()
+        with self.assertRaises(ValueError):
+            st.append_correction(self.dd, "boss-kim", "L9_nonsense", "n")
+        self.assertEqual(st.load_persona(self.dd, "boss-kim")["corrections"], [])
+
+    def test_empty_note_rejected(self):
+        self._seed()
+        with self.assertRaises(ValueError):
+            st.append_correction(self.dd, "boss-kim", "L2_voice", "")
 
 
 class TestRenderReminder(StateTestCase):
@@ -691,6 +778,51 @@ class TestSaveTakeawayCLI(StateTestCase):
         self._run("--persona", "boss-kim", "--theme", "boss/micromanaging", "--takeaway", "two")
         entries = st.load_log(self.dd)["entries"]
         self.assertEqual([e["takeaway"] for e in entries], ["one", "two"])
+
+
+class TestSaveCorrectionCLI(StateTestCase):
+    """The correction write path (issue 08) goes model -> save_correction.py CLI.
+    Append correctness lives in TestPersonaCorrection; these drive the *CLI* end to
+    end on disk so the real seam (arg parsing -> data_dir -> append -> save) can't
+    rot unnoticed. SAY_IT_DATA_DIR points the script at the test's tmp dir."""
+
+    def setUp(self):
+        super().setUp()
+        st.save_persona(self.dd, st.persona_template("boss-kim"))
+
+    def _run(self, *args):
+        env = dict(os.environ, SAY_IT_DATA_DIR=str(self.dd))
+        return subprocess.run(
+            [sys.executable, str(_SCRIPTS / "save_correction.py"), *args],
+            capture_output=True, text=True, env=env)
+
+    def test_cli_appends_correction(self):
+        res = self._run("--persona", "boss-kim", "--layer", "L2_voice",
+                        "--note", "he is softer than this")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        corr = st.load_persona(self.dd, "boss-kim")["corrections"]
+        self.assertEqual(len(corr), 1)
+        self.assertEqual(corr[0]["layer"], "L2_voice")
+        self.assertEqual(corr[0]["note"], "he is softer than this")
+
+    def test_cli_stores_before_after(self):
+        res = self._run("--persona", "boss-kim", "--layer", "L4_relationship_dynamics",
+                        "--note", "warmer", "--before", "cold", "--after", "warm")
+        self.assertEqual(res.returncode, 0, res.stderr)
+        c = st.load_persona(self.dd, "boss-kim")["corrections"][0]
+        self.assertEqual((c["from"], c["to"]), ("cold", "warm"))
+
+    def test_cli_append_only_across_invocations(self):
+        # Two separate processes (two sessions): the second must not clobber the
+        # first — non-destructive accumulation has to hold across the CLI boundary.
+        self._run("--persona", "boss-kim", "--layer", "L2_voice", "--note", "one")
+        self._run("--persona", "boss-kim", "--layer", "L3_emotional_triggers", "--note", "two")
+        notes = [c["note"] for c in st.load_persona(self.dd, "boss-kim")["corrections"]]
+        self.assertEqual(notes, ["one", "two"])
+
+    def test_cli_rejects_unknown_persona(self):
+        res = self._run("--persona", "ghost", "--layer", "L2_voice", "--note", "n")
+        self.assertNotEqual(res.returncode, 0)
 
 
 class TestDistressHookCLI(StateTestCase):
