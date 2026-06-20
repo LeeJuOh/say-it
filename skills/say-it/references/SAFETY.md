@@ -28,30 +28,29 @@ the exercise; it's a sign the right support is a professional, not a chatbot.
 The persona you face is **your internal model of someone** — "the person as you
 perceive them" — externalised so you have someone to say it to. It is not the real
 person, not a faithful biography, and nothing it says is a verdict, an apology, or
-forgiveness *from them*. You put down **this one knot**; you never "say goodbye" to
-the person. They're alive — you'll handle the real them on your own terms, when you
-choose to. (PRD frame; reinforced at build preview and at S4 closure bit 3.)
+forgiveness *from them*. You put down **this one knot** — never the person. They're
+alive; whatever you do with the real them, if anything, stays yours to decide in
+your own time.
 
 ## If it gets hard — the crisis line
 
-This session deliberately stirs up suppressed feeling (S1 is a vent). If, in the
-middle of it, you find yourself in real distress — panic, or any thought of harming
-yourself — **the session stops and hands you a crisis line.** That is duty of care,
-not a contradiction of "this isn't therapy": surfacing a crisis line is exactly
-*acknowledging a limit* — "this isn't our domain; here is who can help" (ADR 0003).
+This session deliberately stirs up feelings you've kept down. If, in the middle of
+it, you find yourself in real distress — panic, or any thought of harming yourself —
+**the session stops and hands you a crisis line.** That is duty of care, not a
+contradiction of "this isn't therapy": surfacing a crisis line is exactly
+*acknowledging a limit* — "this isn't our domain; here is who can help."
 
-The crisis line is the **Korean-locale** resource, and it is the **single source**
-defined once in `lexicon/distress.ko.json` (`DISTRESS_HOTLINE`) — the same number
-the runtime distress path surfaces. This notice does **not** re-declare the number;
-to show it, read it from that one source (`sayit_state.hotline_text()`) so the
-static notice and the runtime can never disagree.
+The crisis line shown is Korea's national suicide-prevention counseling line,
+available 24/7. When this notice is surfaced, the exact number is pulled live from
+the one shared crisis-line source, so what you see always matches what the session
+itself would show you in the moment.
 
 ## What we do with your words (narration only, kept local)
 
 - **Narration only.** You describe the person *in your own words*. We do not ask
   for, accept, or read chat logs, KakaoTalk exports, screenshots, or DMs — your
   telling is the perception we want; a raw log is the real person, which is exactly
-  what we are *not* modelling (ADR 0002, permanent).
+  what we are *not* modelling.
 - **Local.** The persona, the live session state, and your saved takeaways are JSON
   files under the plugin's local data dir on your own machine. There is no server,
   no upload, and no account in this skill stage.
@@ -69,7 +68,7 @@ want to finally say it and set the knot down.
 **Not a fit:**
 
 - **The deceased, or grief.** Out of scope until the right crisis-and-sensitivity
-  safeguards exist (PRD; second-phase expansion).
+  safeguards exist — planned for a later, safeguarded phase.
 - **Minors.** This is for adults working their own relationships.
 - **As a weapon or a rehearsal for harm.** It's a place to put something down, not
   to sharpen a grievance into a plan against a real person.
@@ -81,5 +80,22 @@ want to finally say it and set the knot down.
 
 This is a **notice / disclaimer / guide page**, not a contract. Formal Terms of
 Service, PIPA de-identification, and any server-side storage belong to the hosting-
-app stage, not this skill (PRD scope). When the product reaches that stage, this
-page is the seed a formal legal review extends — it is not that review.
+app stage, not this skill. When the product reaches that stage, this page is the
+seed a formal legal review extends — it is not that review.
+
+<!--
+source notes (for maintainers; NOT part of the user-facing notice — the model
+renders the prose above to the user and drops this block):
+- Frame & scope (light one round, deceased/minors exclusion, app-stage ToS/PIPA):
+  PRD (docs/prd/PRD.md).
+- "the person as you perceive them", not the real person: reinforced at build
+  preview and at S4 closure (bit 3).
+- Narration-only input + local-only data: ADR 0002.
+- Crisis line as duty-of-care that coexists with "not therapy", and the two-grade
+  stop: ADR 0003. Runtime mechanism: distress-detection.md.
+- The crisis line is a SINGLE SOURCE: lexicon/distress.ko.json (DISTRESS_HOTLINE),
+  rendered via sayit_state.hotline_text(). Do NOT hardcode a second copy in this
+  notice (issue 10, no-mismatch rule). Current value for human reference only
+  (authoritative source = the lexicon): 109 — Korea's suicide-prevention line, 24/7.
+-->
+
