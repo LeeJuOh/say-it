@@ -121,13 +121,18 @@ class TestTurnCapGuard(StateTestCase):
 
 
 class TestDistressSeam(StateTestCase):
-    """ADR 0003 HARD floor. Issue 01 wires the call site only; DISTRESS_PATTERNS
-    is empty. We patch a pattern in to prove the seam routes, then confirm the
-    empty default stays clear — so issue 07 can fill regexes without touching
-    the call site."""
+    """ADR 0003 HARD floor — the *seam mechanics*, independent of the real Korean
+    patterns: empty patterns never fire, an injected pattern routes by tier, and
+    acute-harm outranks panic. We patch DISTRESS_PATTERNS to exercise the routing
+    with locale-neutral ASCII keywords, then restore the lexicon-loaded patterns in
+    tearDown so the order-independent suite still sees the real floor afterwards."""
+
+    def setUp(self):
+        super().setUp()
+        self._saved_patterns = st.DISTRESS_PATTERNS
 
     def tearDown(self):
-        st.DISTRESS_PATTERNS = []  # restore the empty seam for other tests
+        st.DISTRESS_PATTERNS = self._saved_patterns  # restore the real lexicon floor
         super().tearDown()
 
     def test_empty_patterns_never_trigger(self):
@@ -156,6 +161,134 @@ class TestDistressSeam(StateTestCase):
         st.tick(state, "i want to hurt myself")
         self.assertTrue(state["guards"]["distress"]["triggered"])
         self.assertEqual(state["guards"]["distress"]["tier"], "acute-harm")
+
+
+def _load_corpus():
+    """The labelled distress corpus (issue 07). Korean lives in this data file, so
+    the test source stays Hangul-free (the English-source gate) by loading it."""
+    path = st._lexicon_dir() / "distress_examples.ko.json"
+    return json.loads(path.read_text(encoding="utf-8"))["cases"]
+
+
+class TestDistressLexicon(StateTestCase):
+    """The real Korean HARD floor (issue 07), asserted against the labelled corpus.
+    The corpus IS the spec: self-directed distress fires (panic / acute-harm), while
+    outward rage, idioms, and quit-the-situation venting stay clear — the
+    false-positive boundary that, if wrong, cuts off the catharsis this product is
+    for. Korean stays in the data file; this test never inlines it."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.cases = _load_corpus()
+
+    def test_lexicon_actually_loaded(self):
+        # An empty floor in production means a broken install, not a design choice —
+        # so prove the shipped lexicon populates both tiers.
+        self.assertTrue(st.DISTRESS_PATTERNS, "distress lexicon failed to load")
+        tiers = {t for _, t in st.DISTRESS_PATTERNS}
+        self.assertEqual(tiers, {"panic", "acute-harm"})
+        self.assertTrue(st.DISTRESS_HOTLINE and st.DISTRESS_HOTLINE.get("number"))
+
+    def test_corpus_covers_all_three_classes(self):
+        # A corpus missing negatives (or either tier) would pass vacuously while
+        # proving nothing about the false-positive boundary.
+        expects = {c["expect"] for c in self.cases}
+        self.assertIn(None, expects)          # normal-venting negatives
+        self.assertIn("panic", expects)
+        self.assertIn("acute-harm", expects)
+
+    def test_every_corpus_case_routes_correctly(self):
+        for c in self.cases:
+            with self.subTest(label=c.get("label"), text=c["text"]):
+                result = st.check_distress(c["text"])
+                self.assertEqual(result["tier"], c["expect"])
+                self.assertEqual(result["triggered"], c["expect"] is not None)
+
+
+class TestDistressBlock(StateTestCase):
+    """Grade 2 (acute-harm) latches the session BLOCKED in *code* — the
+    resume-refusal can't depend on the model. The latch flips blocked+inactive, the
+    render surfaces GRADE_2 + the hotline, and start_session refuses to reopen. Real
+    Korean phrases are pulled from the corpus (so the source stays Hangul-free) to
+    drive the real patterns end to end."""
+
+    def setUp(self):
+        super().setUp()
+        cases = _load_corpus()
+        self.acute_text = next(c["text"] for c in cases if c["expect"] == "acute-harm")
+        self.panic_text = next(c["text"] for c in cases if c["expect"] == "panic")
+        self.clear_text = next(c["text"] for c in cases if c["expect"] is None)
+
+    def test_acute_harm_tick_latches_blocked_and_inactive(self):
+        state = st.new_session(persona_id="boss-kim")
+        self.assertFalse(state["blocked"])
+        st.tick(state, self.acute_text)
+        self.assertTrue(state["blocked"])     # terminal latch, set in code
+        self.assertFalse(state["active"])     # session deactivated
+
+    def test_panic_tick_does_not_latch_block(self):
+        # Panic is render-only (model de-escalates); it must NOT latch the hold.
+        state = st.new_session(persona_id="boss-kim")
+        st.tick(state, self.panic_text)
+        self.assertEqual(state["guards"]["distress"]["tier"], "panic")
+        self.assertFalse(state["blocked"])
+        self.assertTrue(state["active"])
+
+    def test_clear_tick_leaves_session_running(self):
+        state = st.new_session(persona_id="boss-kim")
+        st.tick(state, self.clear_text)
+        self.assertFalse(state["guards"]["distress"]["triggered"])
+        self.assertFalse(state["blocked"])
+        self.assertTrue(state["active"])
+
+    def test_start_session_refuses_a_blocked_session(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        state = st.load_session(self.dd)
+        st.tick(state, self.acute_text)
+        st.save_session(self.dd, state)
+        self.assertTrue(st.load_session(self.dd)["blocked"])
+        with self.assertRaises(ValueError) as ctx:
+            st.start_session(self.dd, persona_id="boss-kim")
+        self.assertIn("safety hold", str(ctx.exception))
+        # The refusal must not overwrite the blocked state with a fresh active one.
+        reloaded = st.load_session(self.dd)
+        self.assertTrue(reloaded["blocked"])
+        self.assertFalse(reloaded["active"])
+
+    def test_block_session_latches_from_disk(self):
+        # The SOFT-layer path (session_block.py -> block_session) reaches the same
+        # latch as the HARD floor, for acute signals the regex missed.
+        st.start_session(self.dd, persona_id="boss-kim")
+        blocked = st.block_session(self.dd)
+        self.assertTrue(blocked["blocked"])
+        self.assertFalse(blocked["active"])
+        self.assertTrue(st.load_session(self.dd)["blocked"])
+
+    def test_block_session_none_when_no_session(self):
+        self.assertIsNone(st.block_session(self.dd))
+
+    def test_render_grade2_surfaces_marker_hotline_and_block(self):
+        state = st.new_session(persona_id="boss-kim")
+        st.tick(state, self.acute_text)
+        text = st.render_reminder(state)
+        self.assertIn("DISTRESS_TRIGGERED: GRADE_2", text)
+        self.assertIn("session BLOCKED", text)
+        self.assertIn(st.DISTRESS_HOTLINE["number"], text)  # injected verbatim
+
+    def test_render_grade1_marks_panic_only(self):
+        state = st.new_session(persona_id="boss-kim")
+        st.tick(state, self.panic_text)
+        text = st.render_reminder(state)
+        self.assertIn("DISTRESS_TRIGGERED: GRADE_1", text)
+        self.assertNotIn("DISTRESS_TRIGGERED: GRADE_2", text)  # marker, not the policy line
+        self.assertNotIn("session BLOCKED", text)
+
+    def test_safety_hold_render_carries_hotline(self):
+        state = st.new_session(persona_id="boss-kim")
+        st.tick(state, self.acute_text)
+        hold = st.render_safety_hold(state)
+        self.assertIn("SAFETY HOLD", hold)
+        self.assertIn(st.DISTRESS_HOTLINE["number"], hold)
 
 
 class TestTakeawayLog(StateTestCase):
@@ -538,6 +671,56 @@ class TestSaveTakeawayCLI(StateTestCase):
         self._run("--persona", "boss-kim", "--theme", "boss/micromanaging", "--takeaway", "two")
         entries = st.load_log(self.dd)["entries"]
         self.assertEqual([e["takeaway"] for e in entries], ["one", "two"])
+
+
+class TestDistressHookCLI(StateTestCase):
+    """End to end across the real process boundary (issue 07): a BLOCKED session must
+    make the tick hook re-inject the safety hold instead of ticking, and make
+    session_start refuse to resume. Korean comes from the corpus, not the source."""
+
+    def setUp(self):
+        super().setUp()
+        self.acute_text = next(c["text"] for c in _load_corpus() if c["expect"] == "acute-harm")
+        self.env = dict(os.environ, SAY_IT_DATA_DIR=str(self.dd))
+
+    def _block_on_disk(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        state = st.load_session(self.dd)
+        st.tick(state, self.acute_text)
+        st.save_session(self.dd, state)
+        return state
+
+    def test_tick_reinjects_hold_and_does_not_advance_blocked_session(self):
+        blocked = self._block_on_disk()
+        res = subprocess.run(
+            [sys.executable, str(_SCRIPTS / "tick.py")],
+            input=json.dumps({"prompt": "are you still there"}),
+            capture_output=True, text=True, env=self.env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        out = json.loads(res.stdout)
+        ctx = out["hookSpecificOutput"]["additionalContext"]
+        self.assertIn("SAFETY HOLD", ctx)
+        self.assertIn(st.DISTRESS_HOTLINE["number"], ctx)
+        # A blocked session is never ticked: the turn counter must not advance.
+        self.assertEqual(st.load_session(self.dd)["turn"], blocked["turn"])
+
+    def test_session_start_cli_refuses_blocked_with_hotline(self):
+        self._block_on_disk()
+        res = subprocess.run(
+            [sys.executable, str(_SCRIPTS / "session_start.py"), "--persona", "boss-kim"],
+            capture_output=True, text=True, env=self.env)
+        self.assertEqual(res.returncode, 2)              # 2 = safety refusal, not arg error
+        self.assertIn("safety hold", res.stderr)
+        self.assertIn(st.DISTRESS_HOTLINE["number"], res.stderr)
+        self.assertFalse(st.load_session(self.dd)["active"])  # not reopened
+
+    def test_session_block_cli_latches(self):
+        st.start_session(self.dd, persona_id="boss-kim")
+        res = subprocess.run(
+            [sys.executable, str(_SCRIPTS / "session_block.py")],
+            capture_output=True, text=True, env=self.env)
+        self.assertEqual(res.returncode, 0, res.stderr)
+        self.assertTrue(st.load_session(self.dd)["blocked"])
 
 
 if __name__ == "__main__":

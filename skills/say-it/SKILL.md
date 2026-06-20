@@ -52,13 +52,32 @@ Treat that block as **authoritative and machine-owned**:
 - The reminder is freshly injected every turn, so it never goes stale the way an
   early system prompt does in a long session (the context-rot failure ADR 0004
   exists to prevent).
-- If the distress guard is **TRIGGERED**, stop the session immediately and follow
-  the safety path — `panic` → de-escalate and wrap up; `acute-harm` → surface the
-  crisis hotline and do not resume (ADR 0003). This overrides whatever stage you
-  are in, and it overrides the persona: break character the instant it fires (a
-  persona staying cold while the user is in real distress is the one failure this
-  product cannot ship). The HARD keyword floor is wired but not yet populated
-  (issue 07), so for now also apply your own judgment as the SOFT layer on top.
+- If the distress guard is **TRIGGERED**, stop the session immediately. This
+  overrides everything — the stage, the turn cap, and the persona: break character
+  the instant it fires (a persona staying cold while the user is in real distress is
+  the one failure this product cannot ship). The reminder carries a grade marker:
+  - **`DISTRESS_TRIGGERED: GRADE_1`** (panic — the user voicing their *own* acute
+    distress) → drop the role and de-escalate gently, then wind the session down.
+    This is *not* a normal S4 closure — no takeaway ritual, no label-saving — it's a
+    soft landing. End it with `session_end.py`.
+  - **`DISTRESS_TRIGGERED: GRADE_2`** (acute self-harm) → the hook has already
+    latched the session **BLOCKED** in code, so it will not resume. Break character,
+    surface the **crisis hotline the reminder prints verbatim** (don't improvise a
+    number — relay the exact one the hook injected), and do not continue the
+    exercise. The block is already set; you don't call anything to stop it.
+- **The SOFT layer is your judgment on top of the HARD floor (ADR 0003).** The
+  keyword floor catches the unambiguous, self-directed signals deterministically,
+  but it stays deliberately *narrow* to protect this product's core use: pouring out
+  rage *at the other person* ("I want to kill them," aimed outward) is normal
+  catharsis and must never trip the breaker. So the floor keys on **direction**
+  (distress turned on the *self*), not intensity. Your job is to catch what a keyword
+  list can't — somatic panic ("I can't breathe"), oblique self-harm ("I don't want
+  to wake up," "I want it all to end"), or distress phrased in a way the floor
+  missed — and route it the same way: own-distress → treat as Grade 1; a self-harm
+  signal → treat as Grade 2 **and run `session_block.py`** so the resume-refusal
+  holds for your detection too, not just the floor's. When you're unsure whether
+  venting is outward rage or genuine self-directed distress, read the *direction*:
+  rage at them is catharsis to receive; despair turned on themselves is the breaker.
 
 You never have to write to `session_state.json`; the hook does the per-turn tick.
 You only flip the session on at the start and off at the end (below).

@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "locale": "ko",
+  "description": "Distress circuit-breaker HARD-floor lexicon (issue 07, ADR 0003). Korean-locale keyword regexes + the crisis hotline resource. The patterns key on DIRECTION, not intensity: the user's OWN self-directed distress fires; outward rage at the other person is normal catharsis for this product and must never fire. Notes are English (the plugin's source-prose rule); the regex data itself is necessarily Korean, which is why this lives in lexicon/ -- outside the scripts/skills/tests tree the English-source gate scans. distress_examples.ko.json is the labelled test oracle.",
+  "patterns": [
+    {"pattern": "죽고\\s*싶", "tier": "acute-harm", "note": "want to die (self): die(intransitive) + first-person desiderative. Excludes the kill(transitive, at other) forms and the 'I could die' hyperbole."},
+    {"pattern": "죽어버리.{0,3}싶", "tier": "acute-harm", "note": "want to just die (self, emphatic). Excludes kill-them-emphatic and the bare 'drop dead' curse aimed at the other (no desiderative)."},
+    {"pattern": "자살", "tier": "acute-harm", "note": "suicide (noun); inherently self-directed."},
+    {"pattern": "자해", "tier": "acute-harm", "note": "self-harm; inherently self-directed."},
+    {"pattern": "사라(지|져).{0,5}싶", "tier": "acute-harm", "note": "want to disappear/vanish (self) + desiderative. Excludes the bare 'get lost' command aimed at the other (no desiderative)."},
+    {"pattern": "없어지.{0,3}싶", "tier": "acute-harm", "note": "want to cease to exist (self) + desiderative."},
+    {"pattern": "목숨.{0,5}끊", "tier": "acute-harm", "note": "end one's life."},
+    {"pattern": "살고\\s*싶지\\s*않", "tier": "acute-harm", "note": "do not want to live (self)."},
+    {"pattern": "무서워", "tier": "panic", "note": "scared (own fear). Direction-ambiguous against 'X is scary'; kept on the HARD floor per the issue's example list, with the SOFT layer refining by context."},
+    {"pattern": "너무\\s*힘들", "tier": "panic", "note": "overwhelmed / it's too much (own pain)."},
+    {"pattern": "너무\\s*괴로", "tier": "panic", "note": "in agony (own pain)."},
+    {"pattern": "너무\\s*벅차", "tier": "panic", "note": "more than I can handle (own pain)."},
+    {"pattern": "그만하고\\s*싶", "tier": "panic", "note": "want it (the distress) to stop. Distinct from the quit-the-job/quit-the-situation forms, which are venting and do NOT match."},
+    {"pattern": "버틸\\s*수가?\\s*없", "tier": "panic", "note": "can't endure (acute self-overwhelm)."},
+    {"pattern": "더는\\s*못\\s*버티", "tier": "panic", "note": "can't hold on any longer."},
+    {"pattern": "더\\s*이상\\s*못\\s*버티", "tier": "panic", "note": "can't hold on any longer (variant)."},
+    {"pattern": "더는\\s*못\\s*견디", "tier": "panic", "note": "can't bear it any longer."},
+    {"pattern": "무서워\\s*죽겠", "tier": "panic", "note": "flooded with fear. The intensifier only fires with the fear prefix, so the bare idiom (e.g. 'starving to death') stays clear."},
+    {"pattern": "불안해\\s*죽겠", "tier": "panic", "note": "flooded with anxiety (prefix-gated intensifier, as above)."},
+    {"pattern": "불안해서\\s*못", "tier": "panic", "note": "too anxious to function."}
+  ],
+  "hotline": {
+    "name": "자살예방 상담전화",
+    "number": "109",
+    "hours": "24시간 연중무휴",
+    "note": "전화·문자 상담. 정신건강 위기상담 1577-0199."
+  }
+}

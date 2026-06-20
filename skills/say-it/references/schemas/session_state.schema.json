@@ -38,11 +38,15 @@
       "type": "boolean",
       "description": "Whether the one-time (+3 turn) extension past the soft cap has been spent. Enforcement lives in issue 04; this flag is the deterministic record."
     },
+    "blocked": {
+      "type": "boolean",
+      "description": "Terminal safety hold latched by the distress circuit-breaker on an acute-harm (Grade 2) signal (ADR 0003, issue 07). True = the session was stopped for acute self-harm and will NOT resume: the tick hook re-injects a hold instead of ticking, and session_start refuses to open a new round. Set by the hook tick (HARD floor) or session_block.py (SOFT layer). Distinct from the persona-level block flag (issue 08). Defaults false; older session files without it read as not-blocked."
+    },
     "started_at": { "type": ["string", "null"], "description": "ISO-8601 timestamp of session start." },
     "updated_at": { "type": ["string", "null"], "description": "ISO-8601 timestamp of the last tick." },
     "guards": {
       "type": "object",
-      "description": "Per-turn guard results computed by the hook. Distress detection is a wired SEAM here (issue 07 fills the keyword patterns); turn-cap soft/hard flags are computed deterministically now (issue 04 owns enforcement copy).",
+      "description": "Per-turn guard results computed by the hook. Distress detection runs the HARD-floor keyword regexes (issue 07; patterns/hotline in lexicon/distress.ko.json) and routes panic/acute-harm; turn-cap soft/hard flags are computed deterministically (issue 04).",
       "additionalProperties": false,
       "properties": {
         "distress": {

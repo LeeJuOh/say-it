@@ -43,8 +43,25 @@ def main() -> int:
         return 0  # no data dir resolvable -> nothing to tick
 
     state = st.load_session(dd)
-    if not state or not state.get("active"):
-        return 0  # no active say-it session -> stay silent (the gate)
+    if not state:
+        return 0  # no say-it session at all -> stay silent (the gate)
+
+    if state.get("blocked"):
+        # Terminal safety hold from a prior acute-harm (Grade 2) trigger. Don't tick
+        # or resume: re-inject the hold every turn so the conversation can't drift
+        # back into the session (defense in depth with session_start's entry-refusal).
+        output = {
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": st.render_safety_hold(state),
+            },
+            "suppressOutput": True,
+        }
+        print(json.dumps(output, ensure_ascii=False))
+        return 0
+
+    if not state.get("active"):
+        return 0  # session ended normally -> stay silent (the gate)
 
     prompt = event.get("prompt", "") or ""
     if event.get("session_id") and not state.get("session_id"):

@@ -31,8 +31,21 @@ def main() -> int:
         print("say-it: no data dir (CLAUDE_PLUGIN_DATA / SAY_IT_DATA_DIR unset)", file=sys.stderr)
         return 1
 
-    state = st.start_session(dd, persona_id=args.persona,
-                             session_id=args.session, theme_label=args.theme)
+    try:
+        state = st.start_session(dd, persona_id=args.persona,
+                                 session_id=args.session, theme_label=args.theme)
+    except ValueError as exc:
+        # Safety hold: the prior session was stopped on an acute-harm (Grade 2)
+        # signal and latched BLOCKED, so we refuse to open a fresh round on top of
+        # it (ADR 0003 "no resume"). Surface the crisis hotline instead. Exit 2 so
+        # the caller can tell a safety refusal from an arg/data-dir error (exit 1).
+        msg = f"say-it: {exc}"
+        h = st.DISTRESS_HOTLINE
+        if h:
+            num = " ".join(p for p in (h.get("name"), h.get("number")) if p)
+            msg += f"\nsay-it crisis hotline: {num}"
+        print(msg, file=sys.stderr)
+        return 2
     print(f"say-it session started: persona={state['persona_id']} "
           f"stage={state['stage']} turn={state['turn']}")
     return 0

@@ -39,12 +39,23 @@ STAGES = ("vent", "role-swap", "integration", "closure")
 DEFAULT_SOFT_CAP = 8
 DEFAULT_HARD_CAP = 11
 
-# Distress detection SEAM. Issue 07 fills this with Korean-locale keyword regexes
-# and tier routing. Empty here on purpose: issue 01 only wires the call site so
-# the HARD floor (ADR 0003) has a deterministic home, it does not yet detect
-# anything. Each entry is (compiled_or_raw_pattern, tier) where tier is
-# "panic" or "acute-harm".
+# Distress detection (ADR 0003 HARD floor). The Korean-locale keyword regexes and
+# the crisis-hotline resource are runtime *data*, not source prose, so they live in
+# a JSON lexicon OUTSIDE the English-source tree -- scripts/skills/tests stay
+# Hangul-free so the gate `grep -rlP '[\x{AC00}-\x{D7A3}]' scripts skills tests` is 0.
+# The lexicon is loaded once at import (see the bottom of this file) into
+# DISTRESS_PATTERNS and DISTRESS_HOTLINE. Each pattern entry is (raw_regex, tier),
+# tier being "panic" (Grade 1) or "acute-harm" (Grade 2); check_distress scans them
+# every turn.
+#
+# The discriminator the regexes encode is DIRECTION, not intensity: rage aimed at
+# the OTHER person is normal catharsis for this product and must never fire, while
+# the user's OWN self-directed distress must. That self/other split is the whole
+# safety design -- see the per-pattern notes in lexicon/distress.ko.json and the
+# labelled corpus in lexicon/distress_examples.ko.json that the tests assert against.
+# Defaults here are placeholders; the real values land at the module-bottom load.
 DISTRESS_PATTERNS: list[tuple[str, str]] = []
+DISTRESS_HOTLINE: dict | None = None
 
 
 # --------------------------------------------------------------------------- #
@@ -93,6 +104,33 @@ def _read_json(path: Path, default):
         return default
 
 
+def _lexicon_dir() -> Path:
+    """The runtime data lexicon ships alongside scripts/ at the plugin root, one
+    level up from this file. It is kept out of scripts/skills/tests so its Korean
+    keyword data never trips the English-source gate."""
+    return Path(__file__).resolve().parent.parent / "lexicon"
+
+
+def load_distress_lexicon(path: Path | None = None):
+    """Load the distress keyword patterns + crisis-hotline resource from the JSON
+    lexicon. Returns ``(patterns, hotline)`` where patterns is a list of
+    ``(raw_regex, tier)``.
+
+    A missing or malformed lexicon degrades to ``([], None)`` rather than raising:
+    this is read on the hook's hot path, which must never crash, and the SOFT model
+    layer still stands if the floor goes dark. That degradation is a runtime
+    backstop, not the expected path -- the test suite asserts the shipped lexicon
+    actually loads, so an empty floor in production means a broken install, not a
+    silent design choice."""
+    data = _read_json(path or (_lexicon_dir() / "distress.ko.json"), {})
+    patterns: list[tuple[str, str]] = []
+    for entry in data.get("patterns", []):
+        pat, tier = entry.get("pattern"), entry.get("tier")
+        if pat and tier in ("panic", "acute-harm"):
+            patterns.append((pat, tier))
+    return patterns, data.get("hotline")
+
+
 def _write_json_atomic(path: Path, obj) -> None:
     """Write via a temp file + os.replace so a crashed/concurrent write can never
     leave a half-written state file. The hook runs on every turn; a torn write
@@ -132,6 +170,11 @@ def new_session(persona_id: str | None = None,
         "stage": "vent",
         "turn": 0,
         "extension_used": False,
+        # Terminal safety latch (ADR 0003). Set True only by the distress
+        # circuit-breaker on an acute-harm (Grade 2) signal; once True the session
+        # will not resume (the hook re-injects a hold, start_session refuses).
+        # Distinct from the persona-level block (issue 08).
+        "blocked": False,
         "started_at": now,
         "updated_at": now,
         "guards": {
@@ -163,7 +206,18 @@ def start_session(dd: Path, persona_id: str | None = None,
 
     This (not the hook) is what creates the active state, which is exactly how
     the globally-firing hook stays silent outside a say-it session: no active
-    file, no tick."""
+    file, no tick.
+
+    Refuses to start over a BLOCKED session: an acute-harm (Grade 2) stop is
+    terminal (ADR 0003 "no resume"), so a new round is not silently opened on top
+    of it. The refusal is the resume-gate at the *entry*, paired with the hook's
+    per-turn hold re-injection. Raises ValueError so the session_start CLI can
+    surface the hold + crisis hotline instead of writing a fresh active session."""
+    existing = load_session(dd)
+    if existing and existing.get("blocked"):
+        raise ValueError(
+            "session is on a safety hold (acute-distress block) and will not "
+            "resume; surface the crisis hotline rather than starting a new round")
     state = new_session(persona_id=persona_id, session_id=session_id)
     state["theme_label"] = theme_label
     save_session(dd, state)
@@ -176,6 +230,25 @@ def end_session(dd: Path) -> dict | None:
     state = load_session(dd)
     if state is None:
         return None
+    state["active"] = False
+    save_session(dd, state)
+    return state
+
+
+def block_session(dd: Path) -> dict | None:
+    """Latch the on-disk session BLOCKED (terminal safety hold) and deactivate it.
+
+    The HARD floor already latches this in-memory inside ``tick`` when its regexes
+    catch an acute-harm signal. This is the *disk-level* path, exposed via
+    session_block.py, so the SOFT model layer can latch the same hold when it
+    catches an acute-harm signal the keyword floor missed (an oblique phrasing,
+    somatic crisis). Both detection layers therefore converge on the same
+    resume-refusal, instead of SOFT-detected harm quietly leaving the session
+    resumable. Returns None when there is no session to block."""
+    state = load_session(dd)
+    if state is None:
+        return None
+    state["blocked"] = True
     state["active"] = False
     save_session(dd, state)
     return state
@@ -290,6 +363,13 @@ def tick(state: dict, prompt: str = "") -> dict:
     against the new count and this turn's prompt. Mutates and returns `state`."""
     state["turn"] = state.get("turn", 0) + 1
     state["guards"] = evaluate_guards(state, prompt)
+    # Acute-harm (Grade 2) is terminal and unbypassable: latch the session BLOCKED
+    # and inactive right here in code, so resume-refusal never depends on the model
+    # choosing to stop (the model-goodwill failure ADR 0003 forbids). Panic (Grade 1)
+    # is render-only -- the model de-escalates and winds down -- so it does NOT latch.
+    if state["guards"].get("distress", {}).get("tier") == "acute-harm":
+        state["blocked"] = True
+        state["active"] = False
     state["updated_at"] = _now()
     return state
 
@@ -329,10 +409,28 @@ def render_reminder(state: dict) -> str:
     else:
         cap_line = f"turn-cap: turn {turn} (soft {soft}, hard {hard}) — not reached"
 
+    # Distress lines carry a machine-readable GRADE marker the model branches on,
+    # the same way the cap emits CAP_TRIGGERED. GRADE_2 (acute-harm) also prints the
+    # crisis hotline verbatim so the model relays a *fact the hook injected*, not a
+    # number it recalled, and announces the code-level BLOCKED latch.
+    distress_lines: list[str] = []
     if distress.get("triggered"):
-        distress_line = f"distress guard: TRIGGERED tier={distress.get('tier')}"
+        tier = distress.get("tier")
+        distress_lines.append(f"distress guard: TRIGGERED tier={tier}")
+        if tier == "acute-harm":
+            distress_lines.append("DISTRESS_TRIGGERED: GRADE_2")
+            distress_lines.append(_hotline_line())
+            distress_lines.append(
+                "session BLOCKED: acute self-harm signal — this session will not "
+                "resume. Break character now, surface the crisis hotline above "
+                "verbatim, and do not continue the empty-chair exercise.")
+        else:  # panic
+            distress_lines.append("DISTRESS_TRIGGERED: GRADE_1")
+            distress_lines.append(
+                "Break character now; de-escalate gently and wind the session down. "
+                "This is not a normal closure (no takeaway ritual) — a soft landing.")
     else:
-        distress_line = "distress guard: clear"
+        distress_lines.append("distress guard: clear")
 
     lines = [
         "[say-it session — authoritative state, refreshed this turn by the hook]",
@@ -342,13 +440,42 @@ def render_reminder(state: dict) -> str:
     ]
     if cap_marker:
         lines.append(cap_marker)
-    lines += [
-        distress_line,
+    lines += distress_lines
+    lines.append(
         "This block is machine-owned and overrides any stage or count you infer "
         "from the conversation. Honor `stage` and the cap policy. If the distress "
-        "guard is TRIGGERED, stop the session and follow the safety path "
-        "(panic -> de-escalate; acute-harm -> crisis hotline, no resume) "
-        "regardless of stage.",
+        "guard is TRIGGERED, stop the session immediately and follow the safety path "
+        "(GRADE_1 panic -> de-escalate and wind down; GRADE_2 acute-harm -> surface "
+        "the crisis hotline, no resume) regardless of stage or turn count.")
+    return "\n".join(lines)
+
+
+def _hotline_line() -> str:
+    """Format the crisis-hotline resource from the loaded lexicon into the one line
+    the model relays verbatim. Degrades to a generic pointer if the lexicon is
+    absent, so the model still surfaces *something* rather than a blank."""
+    h = DISTRESS_HOTLINE
+    if not h:
+        return "crisis hotline: (resource unavailable — surface a local crisis line)"
+    label = " ".join(p for p in (h.get("name"), h.get("number")) if p)
+    if h.get("hours"):
+        label += f" ({h['hours']})"
+    return f"crisis hotline: {label}"
+
+
+def render_safety_hold(state: dict) -> str:
+    """Re-injected every turn while a session carries the BLOCKED latch (from a prior
+    acute-harm trigger). It re-asserts the hold so the conversation cannot drift back
+    into the empty-chair session after a Grade-2 stop — the resume-refusal seen from
+    *inside* the same conversation, complementing start_session's refusal of a *new*
+    session. Kept minimal: the hold and the hotline, nothing that invites continuing."""
+    lines = [
+        "[say-it session — SAFETY HOLD, machine-owned]",
+        "This session was stopped on an acute self-harm signal and is on a safety "
+        "hold; it will not resume. Do not continue the empty-chair exercise or "
+        "re-enter the persona.",
+        _hotline_line(),
+        "Stay with the user plainly and keep the crisis hotline above in front of them.",
     ]
     return "\n".join(lines)
 
@@ -531,3 +658,15 @@ def persona_template(persona_id: str = "boss-kim") -> dict:
         },
         "corrections": [],
     }
+
+
+# --------------------------------------------------------------------------- #
+# Distress lexicon load (runs once at import)
+# --------------------------------------------------------------------------- #
+
+# Done here, at the bottom, so the call can use the helpers defined above
+# (_read_json / _lexicon_dir). check_distress / render_reminder resolve these
+# module globals at call time, so the load just has to finish before the first
+# turn — which it does, at import. Tests that exercise the empty seam reassign
+# DISTRESS_PATTERNS directly and restore it, so they stay independent of this.
+DISTRESS_PATTERNS, DISTRESS_HOTLINE = load_distress_lexicon()
