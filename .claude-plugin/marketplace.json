@@ -1,0 +1,23 @@
+{
+  "name": "say-it",
+  "owner": {
+    "name": "say-it"
+  },
+  "description": "Single-plugin marketplace for say-it.",
+  "plugins": [
+    {
+      "name": "say-it",
+      "source": "./",
+      "description": "Empty-chair session skill. Say the things you never got to say to a real person who still lives in your head, then put that one knot down. Builds a persona from your own narration and runs a structured 4-stage session with anti-rumination guardrails (turn cap, distress circuit-breaker, revisit guard).",
+      "version": "0.1.0",
+      "license": "MIT",
+      "keywords": [
+        "empty-chair",
+        "interpersonal",
+        "session",
+        "rumination-guard",
+        "persona"
+      ]
+    }
+  ]
+}
