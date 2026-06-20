@@ -79,6 +79,11 @@ Treat that block as **authoritative and machine-owned**:
   venting is outward rage or genuine self-directed distress, read the *direction*:
   rage at them is catharsis to receive; despair turned on themselves is the breaker.
 
+The full mechanism behind all of this — the two-grade floor, where the Korean
+lexicon lives, the BLOCKED latch and resume-refusal — is `references/distress-detection.md`.
+Read it when you need to understand or change *how* the breaker works; the bullets
+above are what you act on per turn.
+
 You never have to write to `session_state.json`; the hook does the per-turn tick.
 You only flip the session on at the start and off at the end (below).
 

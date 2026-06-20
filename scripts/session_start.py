@@ -40,10 +40,9 @@ def main() -> int:
         # it (ADR 0003 "no resume"). Surface the crisis hotline instead. Exit 2 so
         # the caller can tell a safety refusal from an arg/data-dir error (exit 1).
         msg = f"say-it: {exc}"
-        h = st.DISTRESS_HOTLINE
-        if h:
-            num = " ".join(p for p in (h.get("name"), h.get("number")) if p)
-            msg += f"\nsay-it crisis hotline: {num}"
+        line = st.hotline_text()
+        if line:
+            msg += f"\nsay-it crisis hotline: {line}"
         print(msg, file=sys.stderr)
         return 2
     print(f"say-it session started: persona={state['persona_id']} "

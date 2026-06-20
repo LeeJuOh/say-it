@@ -290,6 +290,26 @@ class TestDistressBlock(StateTestCase):
         self.assertIn("SAFETY HOLD", hold)
         self.assertIn(st.DISTRESS_HOTLINE["number"], hold)
 
+    def test_hotline_text_is_single_source(self):
+        # issue 10: every surface that shows the hotline must read this one string,
+        # so the static notice and the runtime can never disagree (no-mismatch rule).
+        h = st.DISTRESS_HOTLINE
+        line = st.hotline_text()
+        self.assertIn(h["number"], line)
+        self.assertIn(h["name"], line)
+        self.assertIn(h["hours"], line)
+        # the runtime-reminder form is just this string with a prefix
+        self.assertIn(line, st._hotline_line())
+
+    def test_hotline_text_empty_without_lexicon(self):
+        # Absent lexicon -> empty string; callers own the fallback wording.
+        saved = st.DISTRESS_HOTLINE
+        st.DISTRESS_HOTLINE = None
+        try:
+            self.assertEqual(st.hotline_text(), "")
+        finally:
+            st.DISTRESS_HOTLINE = saved
+
 
 class TestTakeawayLog(StateTestCase):
     """The log is append-only: closing a session adds an entry, never rewrites

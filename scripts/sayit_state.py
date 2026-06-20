@@ -450,16 +450,29 @@ def render_reminder(state: dict) -> str:
     return "\n".join(lines)
 
 
-def _hotline_line() -> str:
-    """Format the crisis-hotline resource from the loaded lexicon into the one line
-    the model relays verbatim. Degrades to a generic pointer if the lexicon is
-    absent, so the model still surfaces *something* rather than a blank."""
+def hotline_text() -> str:
+    """Render the crisis-hotline resource as the single user-facing string
+    ("name number (hours)"). This is the one place the lexicon's hotline becomes
+    human-facing text, so every surface that shows it -- the runtime reminder, the
+    start-up safety refusal, and the build-entry notice -- reads the same value and
+    can never drift (issue 10, no-mismatch rule). Empty string if the lexicon is absent;
+    callers decide the fallback wording for their context."""
     h = DISTRESS_HOTLINE
     if not h:
-        return "crisis hotline: (resource unavailable — surface a local crisis line)"
+        return ""
     label = " ".join(p for p in (h.get("name"), h.get("number")) if p)
     if h.get("hours"):
         label += f" ({h['hours']})"
+    return label
+
+
+def _hotline_line() -> str:
+    """The runtime-reminder form: the user-facing hotline string prefixed for the
+    model to relay verbatim. Degrades to a generic pointer if the lexicon is absent,
+    so the model still surfaces *something* rather than a blank."""
+    label = hotline_text()
+    if not label:
+        return "crisis hotline: (resource unavailable — surface a local crisis line)"
     return f"crisis hotline: {label}"
 
 

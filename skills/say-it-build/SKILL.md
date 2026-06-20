@@ -23,6 +23,31 @@ fill, you fill along the grain of what they said.
 Build and session are deliberately separate: this skill *only* builds. When the
 persona is saved, tell the user they can start a session with `/say-it`.
 
+## First thing: the one-time safety notice
+
+Before you ask anything about the person — at the very start of a build, **once** —
+surface the core safety notice. say-it deliberately stirs up suppressed feeling, and
+the user is about to start describing someone they have unfinished business with, so
+they should meet the frame before they pour anything in. Say it in your own warm
+words (in the user's language), not as a wall of legalese, and fold in three things:
+
+1. **This is a light one round, not therapy** — no clinician, no diagnosis; if what
+   they're carrying is bigger than one round, the right support is a professional.
+2. **The person you'll build is *the person as they perceive them*** — their internal
+   model, not the real person, and nothing it later says is a verdict from the real one.
+3. **If it gets hard, there's a crisis line.** Pull the exact number from the single
+   source so this never drifts from the runtime one (issue 10, ADR 0003):
+
+   ```bash
+   python3 -c "import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(st.hotline_text())"
+   ```
+
+Keep it to those three beats — this is the *core* notice, not the whole page. Point
+the user at `../say-it/references/SAFETY.md` (the full one-page notice: limits, data,
+appropriate vs forbidden uses, who it's for) if they want the rest, and **don't
+repeat the notice every turn** — once at entry is the point; re-surfacing it mid-build
+just adds friction.
+
 ## Say this framing out loud (and again at preview)
 
 > "What we're building is the person **as you carry them in your head** — not the

@@ -1,74 +1,85 @@
-# Safety — distress circuit-breaker
+# say-it — safety notice
 
-> **Status: HARD floor live (issue 07).** The deterministic detection floor, the
-> two-grade response, and the BLOCKED resume-refusal are implemented. What issue
-> **[10](../../../docs/issues/10-safety-disclosure.md)** still owns is the *user-facing*
-> safety disclosure/notice wording (the up-front "this is not therapy" notice and
-> the consent/limits copy) — not the runtime detection, which lives here now.
+> **Audience: the user.** This is the one-page safety disclosure the user should be
+> able to see up front and reach any time during a session. It is *source prose in
+> English*, like the rest of the skill; the model **renders it to the user in their
+> own language** (Korean) when surfacing it — the same way the persona voice and all
+> session facilitation already work. Don't hardcode a translated copy here; that
+> would split the source and trip the English-source gate.
+>
+> The runtime *mechanism* behind the crisis-line handling (how detection fires, the
+> two grades, the BLOCKED latch) is the sibling
+> [`distress-detection.md`](distress-detection.md) — that one is for the agent. This
+> file is the static notice; the dynamic crisis-line surfacing is that mechanism's job.
 
-## Why a hard floor exists (ADR 0003)
+## What say-it is — and is not
 
-Safety detection is two-layered, and the split is deliberate
-([ADR 0003](../../../docs/adr/0003-safety-stop-hard-gate.md)):
+say-it is a **light, one-round ritual** for saying the things you never got to say
+to a real person who still lives in your head. You build *the person as you carry
+them* and run a structured four-stage session to put one knot down.
 
-- **HARD floor** — code-level regex in `scripts/sayit_state.py`
-  (`check_distress` / `DISTRESS_PATTERNS`). Runs every turn on the hook, fires on
-  obvious signals unconditionally, and the model cannot talk its way past it. A
-  prompt-only safety net is forbidden, because a long conversation can drift the
-  model off its instructions exactly when it matters most.
-- **SOFT augment** — prompt-level guidance layered *on top of* the floor for
-  variation and context (`SKILL.md` → "Reading the hook"). It strengthens the
-  floor; it never replaces it.
+It is **not therapy, counseling, or medical care**, and it is not a substitute for
+them. There is no clinician here and no diagnosis — it's one structured round, on
+purpose. If what you're carrying is bigger than one round, that's not a failure of
+the exercise; it's a sign the right support is a professional, not a chatbot.
 
-## Where the Korean detection data lives
+## The person in the chair is not the real person
 
-The keyword regexes and the crisis-hotline resource are locale-specific *runtime
-data*, not source prose, so they sit in a JSON lexicon **outside** the
-English-source tree (`scripts/skills/tests` stay Hangul-free; the gate
-`grep -rlP '[\x{AC00}-\x{D7A3}]' scripts skills tests` must be 0):
+The persona you face is **your internal model of someone** — "the person as you
+perceive them" — externalised so you have someone to say it to. It is not the real
+person, not a faithful biography, and nothing it says is a verdict, an apology, or
+forgiveness *from them*. You put down **this one knot**; you never "say goodbye" to
+the person. They're alive — you'll handle the real them on your own terms, when you
+choose to. (PRD frame; reinforced at build preview and at S4 closure bit 3.)
 
-- `lexicon/distress.ko.json` — the patterns (each `(regex, tier)` with an English
-  note explaining the self-vs-other rationale) plus the crisis hotline. This is the
-  single source issue 10's disclosure copy shares — do not duplicate the number.
-- `lexicon/distress_examples.ko.json` — the labelled corpus the unit tests assert
-  against (true-positives, and the all-important false-positives).
+## If it gets hard — the crisis line
 
-`sayit_state.load_distress_lexicon()` loads both globals (`DISTRESS_PATTERNS`,
-`DISTRESS_HOTLINE`) once at import.
+This session deliberately stirs up suppressed feeling (S1 is a vent). If, in the
+middle of it, you find yourself in real distress — panic, or any thought of harming
+yourself — **the session stops and hands you a crisis line.** That is duty of care,
+not a contradiction of "this isn't therapy": surfacing a crisis line is exactly
+*acknowledging a limit* — "this isn't our domain; here is who can help" (ADR 0003).
 
-## The false-positive constraint (this product's specific trap)
+The crisis line is the **Korean-locale** resource, and it is the **single source**
+defined once in `lexicon/distress.ko.json` (`DISTRESS_HOTLINE`) — the same number
+the runtime distress path surfaces. This notice does **not** re-declare the number;
+to show it, read it from that one source (`sayit_state.hotline_text()`) so the
+static notice and the runtime can never disagree.
 
-This product's core use is the user pouring out suppressed rage. Profanity, fury,
-"I want to kill them" aimed at the *other person* is **normal catharsis** and must
-NOT trigger the breaker — cutting off legitimate venting is how the product breaks.
-So the floor discriminates on **direction**, not intensity: outward rage stays
-clear; the user's own self-directed distress fires. The patterns encode this (e.g.
-the desiderative "want to die" fires, but the transitive "want to kill them" does
-not), and the corpus locks it down with negatives written first.
+## What we do with your words (narration only, kept local)
 
-## The two grades
+- **Narration only.** You describe the person *in your own words*. We do not ask
+  for, accept, or read chat logs, KakaoTalk exports, screenshots, or DMs — your
+  telling is the perception we want; a raw log is the real person, which is exactly
+  what we are *not* modelling (ADR 0002, permanent).
+- **Local.** The persona, the live session state, and your saved takeaways are JSON
+  files under the plugin's local data dir on your own machine. There is no server,
+  no upload, and no account in this skill stage.
 
-When the breaker triggers, the session stops immediately, ahead of the turn cap and
-the stage:
+Because we only ever hold *your* narration kept *locally*, the data risk is small —
+which is why this is a **safety** notice (about emotional safety) rather than a data
+-compliance contract.
 
-1. **panic (Grade 1)** — the user's own acute distress → the hook injects
-   `DISTRESS_TRIGGERED: GRADE_1`; the model breaks character, de-escalates, and
-   winds the session down (soft landing, not a takeaway closure).
-2. **acute-harm (Grade 2)** — self-harm / crisis signals → the hook injects
-   `DISTRESS_TRIGGERED: GRADE_2` plus the crisis hotline, and **latches the session
-   BLOCKED in code** (`tick` sets `blocked=true`, `active=false`). The model surfaces
-   the hotline verbatim. Resume is refused two ways: the tick hook re-injects a
-   safety hold every later turn, and `session_start.py` refuses to open a new round.
-   The SOFT layer can reach the same latch via `session_block.py` for acute signals
-   the regex missed.
+## Use it for this — not for that
 
-Surfacing a crisis line is duty-of-care, not therapy: it acknowledges a limit
-("not our domain — here") and so does **not** conflict with the "not therapy, light
-one round" frame (ADR 0003 — regulatorily, it is evidence of care).
+**A good fit:** a living person from your own life — a boss, parent, partner, ex,
+friend — someone you have unfinished business with and keep looping on, where you
+want to finally say it and set the knot down.
 
-## What issue 10 ([10-safety-disclosure](../../../docs/issues/10-safety-disclosure.md)) still owns
+**Not a fit:**
 
-- The up-front user-facing safety notice / disclosure copy (the "not therapy" frame,
-  limits, consent), which references — does not re-define — the hotline number here.
-- Any future locale or jurisdiction handling for the crisis resources (not planned;
-  this product is Korean-locale by ADR 0003).
+- **The deceased, or grief.** Out of scope until the right crisis-and-sensitivity
+  safeguards exist (PRD; second-phase expansion).
+- **Minors.** This is for adults working their own relationships.
+- **As a weapon or a rehearsal for harm.** It's a place to put something down, not
+  to sharpen a grievance into a plan against a real person.
+- **As ongoing therapy or a daily dependency.** It's one round. Looping back to the
+  same knot every day is the rumination the whole product is built to interrupt; the
+  revisit guard will gently mirror that back to you.
+
+## What this notice is not (app-stage, out of scope)
+
+This is a **notice / disclaimer / guide page**, not a contract. Formal Terms of
+Service, PIPA de-identification, and any server-side storage belong to the hosting-
+app stage, not this skill (PRD scope). When the product reaches that stage, this
+page is the seed a formal legal review extends — it is not that review.
