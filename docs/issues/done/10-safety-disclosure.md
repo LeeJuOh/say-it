@@ -1,5 +1,20 @@
-Status: ready-for-agent
+Status: done
 Blocked by: None (단 위기 핫라인 번호는 이슈 07 디스트레스 대응과 동일 소스 공유)
+
+> **Closed** in commit `85d0860` (feat(safety)). Resolved the SAFETY.md ownership
+> clash with issue 07 by **splitting audiences**: the detection *mechanism* prose
+> moved to `references/distress-detection.md` (agent-facing), and `SAFETY.md` was
+> rewritten as the user-facing one-pager. Notice language home = **English source,
+> model renders Korean at runtime** (Trap 2 option a) — Hangul gate stays 0.
+> Crisis hotline kept to a **single source**: new `sayit_state.hotline_text()` is the
+> one user-facing rendering, shared by the runtime reminder, the start-up refusal,
+> and the build-entry notice (불일치 금지). One intentional deviation: the build-entry
+> "1회" notice is a prompt-level once-per-entry instruction, **not** a persisted
+> seen-flag — no new runtime state was warranted for a slice that is otherwise prose
+> (carries Decisions §1). Issue 01's scaffold already listed SAFETY.md; this slice
+> took it stub → live and added `distress-detection.md` as a sibling reference.
+> Closed alongside: 75 unit tests green, Hangul gate 0, throwaway-dir smoke
+> (blocked-session start refusal surfaces the single-source hotline).
 
 # 유저 안전 고지문 (SAFETY)
 
@@ -35,10 +50,10 @@ ex는 `COMPLIANCE.md`(데이터 준법 강조 — 그들 위험=프라이버시)
 
 ## Acceptance criteria
 
-- [ ] `SAFETY.md` 작성 — 치료아님 / 한계 / 위기 핫라인 / 데이터(서술only·로컬) / 적정·금지 용도 / 대상범위 한 장에 모음
-- [ ] `/say-it-build` 첫 진입 시 핵심 고지 1회 표시 (치료아님 + 내 인식 속 그 사람 + 힘들면 핫라인)
-- [ ] 위기 핫라인 = **한국어 로케일** 번호 ([ADR 0003](../adr/0003-safety-stop-hard-gate.md) 언어의존), 이슈 07과 동일 번호 소스 공유 (불일치 금지)
-- [ ] "치료/상담 아님" 프레임과 "핫라인 안내" 공존 명시 (핫라인 = 한계 인정·주의의무지 치료 아님 — ADR 0003)
-- [ ] 대상 = 산 사람, 고인·미성년 제외 명시
-- [ ] `references/`에 SAFETY.md 번들 (이슈 01 scaffold 목록에 추가)
-- [ ] 정식 약관(ToS)·PIPA는 이 슬라이스 범위 밖 (앱 단계) 명시
+- [x] `SAFETY.md` 작성 — 치료아님 / 한계 / 위기 핫라인 / 데이터(서술only·로컬) / 적정·금지 용도 / 대상범위 한 장에 모음
+- [x] `/say-it-build` 첫 진입 시 핵심 고지 1회 표시 (치료아님 + 내 인식 속 그 사람 + 힘들면 핫라인)
+- [x] 위기 핫라인 = **한국어 로케일** 번호 ([ADR 0003](../adr/0003-safety-stop-hard-gate.md) 언어의존), 이슈 07과 동일 번호 소스 공유 (불일치 금지)
+- [x] "치료/상담 아님" 프레임과 "핫라인 안내" 공존 명시 (핫라인 = 한계 인정·주의의무지 치료 아님 — ADR 0003)
+- [x] 대상 = 산 사람, 고인·미성년 제외 명시
+- [x] `references/`에 SAFETY.md 번들 (이슈 01 scaffold 목록에 추가)
+- [x] 정식 약관(ToS)·PIPA는 이 슬라이스 범위 밖 (앱 단계) 명시
