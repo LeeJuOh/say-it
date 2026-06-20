@@ -28,9 +28,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Validate and save a persona.")
     parser.add_argument("--file", required=True,
                         help="path to the persona JSON, or '-' to read stdin")
+    parser.add_argument("--data-dir", default=None,
+                        help="persistent data dir; skills pass ${CLAUDE_PLUGIN_DATA} from "
+                             "skill content. The Bash tool does not receive plugin env vars, "
+                             "so this arrives as a substituted argument, not from env (ADR 0005).")
     args = parser.parse_args()
 
-    dd = st.data_dir()
+    dd = st.data_dir(args.data_dir)
     if dd is None:
         print("say-it: no data dir (CLAUDE_PLUGIN_DATA / SAY_IT_DATA_DIR unset)", file=sys.stderr)
         return 1

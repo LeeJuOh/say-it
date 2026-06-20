@@ -59,7 +59,8 @@ Treat that block as **authoritative and machine-owned**:
   - **`DISTRESS_TRIGGERED: GRADE_1`** (panic — the user voicing their *own* acute
     distress) → drop the role and de-escalate gently, then wind the session down.
     This is *not* a normal S4 closure — no takeaway ritual, no label-saving — it's a
-    soft landing. End it with `session_end.py`.
+    soft landing. End it with
+    `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py" --data-dir "${CLAUDE_PLUGIN_DATA}"`.
   - **`DISTRESS_TRIGGERED: GRADE_2`** (acute self-harm) → the hook has already
     latched the session **BLOCKED** in code, so it will not resume. Break character,
     surface the **crisis hotline the reminder prints verbatim** (don't improvise a
@@ -74,7 +75,8 @@ Treat that block as **authoritative and machine-owned**:
   list can't — somatic panic ("I can't breathe"), oblique self-harm ("I don't want
   to wake up," "I want it all to end"), or distress phrased in a way the floor
   missed — and route it the same way: own-distress → treat as Grade 1; a self-harm
-  signal → treat as Grade 2 **and run `session_block.py`** so the resume-refusal
+  signal → treat as Grade 2 **and run
+  `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_block.py" --data-dir "${CLAUDE_PLUGIN_DATA}"`** so the resume-refusal
   holds for your detection too, not just the floor's. When you're unsure whether
   venting is outward rage or genuine self-directed distress, read the *direction*:
   rage at them is catharsis to receive; despair turned on themselves is the breaker.
@@ -106,7 +108,7 @@ having opened a session.
 **1. Pick who they're sitting across from.** List the personas that exist:
 
 ```bash
-python3 -c "import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print('\n'.join(st.list_personas(st.data_dir())))"
+python3 -c "import sys; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print('\n'.join(st.list_personas(st.data_dir('${CLAUDE_PLUGIN_DATA}'))))"
 ```
 
 Each line is a persona `id`. Branch on the count:
@@ -133,7 +135,7 @@ on their mind about this person right now), then pull the prior issues for this
 persona:
 
 ```bash
-python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(json.dumps([{'theme': e['theme_label'], 'takeaway': e['takeaway']} for e in st.load_log(st.data_dir())['entries'] if e['persona_id'] == '<id>'], ensure_ascii=False))"
+python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(json.dumps([{'theme': e['theme_label'], 'takeaway': e['takeaway']} for e in st.load_log(st.data_dir('${CLAUDE_PLUGIN_DATA}'))['entries'] if e['persona_id'] == '<id>'], ensure_ascii=False))"
 ```
 
 This prints `[]` when the log is empty or has nothing for this persona — that is
@@ -162,7 +164,7 @@ the S4 exit dedup where labels are saved, issue 06 — don't reach for it here.)
 passed, activate the session so the hook starts ticking:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py" --persona <id>
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_start.py" --persona <id> --data-dir "${CLAUDE_PLUGIN_DATA}"
 ```
 
 This writes an active `session_state.json` at stage `vent`, turn 0. Don't pass a
@@ -183,8 +185,8 @@ persist it, then end the session:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_takeaway.py" \
-  --persona <id> --theme "<label>" --takeaway "<user's own words, raw>"
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
+  --persona <id> --theme "<label>" --takeaway "<user's own words, raw>" --data-dir "${CLAUDE_PLUGIN_DATA}"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py" --data-dir "${CLAUDE_PLUGIN_DATA}"
 ```
 
 `session_end.py` flips `active` to false so the hook goes quiet. The session is
@@ -199,8 +201,8 @@ its own — it ticks the turn counter and reports state; deciding the user is re
 for the next chair, and acting on it, is your call. The motor is one script:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" <next-stage>   # forward only
-"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" extend         # one-time vent +3
+"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" <next-stage> "${CLAUDE_PLUGIN_DATA}"   # forward only
+"${CLAUDE_PLUGIN_ROOT}/scripts/transition_stage.sh" extend "${CLAUDE_PLUGIN_DATA}"         # one-time vent +3
 ```
 
 Transitions are **forward only** (`vent → role-swap → integration → closure`); the
@@ -376,7 +378,7 @@ label so a later session can recognize this knot. First pull the labels this per
 already has:
 
 ```bash
-python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(json.dumps(sorted({e['theme_label'] for e in st.load_log(st.data_dir())['entries'] if e['persona_id'] == '<id>'}), ensure_ascii=False))"
+python3 -c "import sys, json; sys.path.insert(0, '${CLAUDE_PLUGIN_ROOT}/scripts'); import sayit_state as st; print(json.dumps(sorted({e['theme_label'] for e in st.load_log(st.data_dir('${CLAUDE_PLUGIN_DATA}'))['entries'] if e['persona_id'] == '<id>'}), ensure_ascii=False))"
 ```
 
 Then dedup by **exact string match** — this is a deterministic call, not a vibe. If
@@ -391,7 +393,7 @@ user's raw words:
 
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_takeaway.py" \
-  --persona <id> --theme "<confirmed label>" --takeaway "<the user's own sentence, raw>"
+  --persona <id> --theme "<confirmed label>" --takeaway "<the user's own sentence, raw>" --data-dir "${CLAUDE_PLUGIN_DATA}"
 ```
 
 The takeaway goes in **raw** — don't summarize or tidy it. The next session's
@@ -417,7 +419,7 @@ funeral).
 Then force-close — one takeaway line, session ends, no drifting on:
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py"
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/session_end.py" --data-dir "${CLAUDE_PLUGIN_DATA}"
 ```
 
 `session_end.py` flips `active` to false so the hook goes quiet. Don't keep the
@@ -441,7 +443,7 @@ visible. One call does it:
 ```bash
 python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_correction.py" \
   --persona <id> --layer <L0_hard_rules|L1_identity|L2_voice|L3_emotional_triggers|L4_relationship_dynamics> \
-  --note "<the user's correction, in their own words, raw>" \
+  --note "<the user's correction, in their own words, raw>" --data-dir "${CLAUDE_PLUGIN_DATA}" \
   [--before "<how the persona behaved>"] [--after "<how it should be>"]
 ```
 

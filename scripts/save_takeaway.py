@@ -26,10 +26,14 @@ def main() -> int:
     parser.add_argument("--persona", required=True)
     parser.add_argument("--theme", required=True, help="confirmed theme label, e.g. boss/credit-theft")
     parser.add_argument("--takeaway", required=True, help="the takeaway in the user's own words, raw")
-    parser.add_argument("--session", default=os.environ.get("CLAUDE_SESSION_ID"))
+    parser.add_argument("--session", default=os.environ.get("CLAUDE_CODE_SESSION_ID"))
+    parser.add_argument("--data-dir", default=None,
+                        help="persistent data dir; skills pass ${CLAUDE_PLUGIN_DATA} from "
+                             "skill content. The Bash tool does not receive plugin env vars, "
+                             "so this arrives as a substituted argument, not from env (ADR 0005).")
     args = parser.parse_args()
 
-    dd = st.data_dir()
+    dd = st.data_dir(args.data_dir)
     if dd is None:
         print("say-it: no data dir (CLAUDE_PLUGIN_DATA / SAY_IT_DATA_DIR unset)", file=sys.stderr)
         return 1

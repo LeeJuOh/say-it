@@ -38,6 +38,11 @@ def main() -> int:
     except json.JSONDecodeError:
         event = {}
 
+    # Resolve the data dir from env, NOT from a --data-dir argument. This is the
+    # one deliberate asymmetry with the Bash-invoked scripts (which must take it as
+    # a substituted argument): hook processes DO receive the plugin's env vars
+    # (CLAUDE_PLUGIN_DATA), the Bash tool does not. Reading env here mirrors the
+    # real platform contract; do not "unify" this to an argument (ADR 0005).
     dd = st.data_dir()
     if dd is None:
         return 0  # no data dir resolvable -> nothing to tick

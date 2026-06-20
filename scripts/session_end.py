@@ -9,6 +9,7 @@ Usage:
     session_end.py
 """
 
+import argparse
 import os
 import sys
 
@@ -17,7 +18,14 @@ import sayit_state as st  # noqa: E402
 
 
 def main() -> int:
-    dd = st.data_dir()
+    parser = argparse.ArgumentParser(description="Deactivate the say-it session.")
+    parser.add_argument("--data-dir", default=None,
+                        help="persistent data dir; skills pass ${CLAUDE_PLUGIN_DATA} from "
+                             "skill content. The Bash tool does not receive plugin env vars, "
+                             "so this arrives as a substituted argument, not from env (ADR 0005).")
+    args = parser.parse_args()
+
+    dd = st.data_dir(args.data_dir)
     if dd is None:
         print("say-it: no data dir (CLAUDE_PLUGIN_DATA / SAY_IT_DATA_DIR unset)", file=sys.stderr)
         return 1

@@ -33,9 +33,13 @@ def main() -> int:
                         help="what the user says is wrong, in their own words, raw")
     parser.add_argument("--before", help="the persona's current behaviour (optional)")
     parser.add_argument("--after", help="how the user says it should be (optional)")
+    parser.add_argument("--data-dir", default=None,
+                        help="persistent data dir; skills pass ${CLAUDE_PLUGIN_DATA} from "
+                             "skill content. The Bash tool does not receive plugin env vars, "
+                             "so this arrives as a substituted argument, not from env (ADR 0005).")
     args = parser.parse_args()
 
-    dd = st.data_dir()
+    dd = st.data_dir(args.data_dir)
     if dd is None:
         print("say-it: no data dir (CLAUDE_PLUGIN_DATA / SAY_IT_DATA_DIR unset)", file=sys.stderr)
         return 1

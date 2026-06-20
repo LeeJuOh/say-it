@@ -557,8 +557,19 @@ def validate_persona(obj) -> list[str]:
 
     if obj.get("schema_version") != SCHEMA_VERSION:
         errors.append(f"schema_version must be {SCHEMA_VERSION}")
-    if not isinstance(obj.get("id"), str) or not obj.get("id"):
+    persona_id = obj.get("id")
+    if not isinstance(persona_id, str) or not persona_id:
         errors.append("id must be a non-empty string")
+    else:
+        # id becomes a file path component (_persona_path -> personas/<id>.json),
+        # so enforce the slug pattern from persona.schema.json here at the write
+        # boundary. Without it a model-generated id like "../x" would escape the
+        # personas dir (path traversal). Mirrors schema pattern
+        # ^[a-z0-9]+(?:-[a-z0-9]+)*$ (M1).
+        import re
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", persona_id):
+            errors.append("id must be a slug: lowercase a-z, 0-9, hyphen-separated "
+                          "(e.g. 'boss-jane'); no slashes, dots, or path segments")
     corrections = obj.get("corrections")
     if not isinstance(corrections, list):
         errors.append("corrections must be an array (may be empty)")

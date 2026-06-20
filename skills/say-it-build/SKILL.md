@@ -190,7 +190,7 @@ sanctioned write path — it validates once at the boundary so a broken persona 
 reach the runner):
 
 ```bash
-python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_persona.py" --file /tmp/persona-draft.json
+python3 "${CLAUDE_PLUGIN_ROOT}/scripts/save_persona.py" --file /tmp/persona-draft.json --data-dir "${CLAUDE_PLUGIN_DATA}"
 ```
 
 If it exits non-zero it prints the structural errors — fix the JSON and re-run. On
