@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "say-it",
   "displayName": "say-it",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Empty-chair session skill. Say the things you never got to say to a real person who still lives in your head, then put that one knot down. Builds a persona from your own narration and runs a structured 4-stage session with anti-rumination guardrails (turn cap, distress circuit-breaker, revisit guard).",
   "author": {
     "name": "say-it"
